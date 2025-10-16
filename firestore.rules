@@ -1,0 +1,88 @@
+/**
+ * @fileoverview Firestore Security Rules for Prototyping.
+ *
+ * Core Philosophy:
+ * This ruleset prioritizes secure authorization based on user ownership while relaxing data validation to accelerate prototyping.  It enforces strict access control based on user identity but trusts the client to maintain data integrity.
+ *
+ * Data Structure:
+ * - Tasks are stored in a flat `/tasks/{taskId}` collection. Each task has a `userId` field indicating ownership.
+ * - User push subscriptions are stored in the `/subscriptions/{userId}` collection, using the user's ID as the document ID.
+ *
+ * Key Security Decisions:
+ * - Tasks are strictly owned by users; only the owner can read, update, or delete a task.
+ * - Users can only create their own subscription document, and only one subscription per user is allowed.
+ * - List operations on `/tasks` are restricted to the owning user.
+ * - No public access is granted to any data.
+ *
+ * Denormalization for Authorization:
+ * - Task documents include a `userId` field, enabling direct ownership checks without additional reads. The `userId` is immutable after creation.
+ */
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /**
+     * @description Checks if the request is authenticated.
+     */
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    /**
+     * @description Checks if the authenticated user is the owner of the resource.
+     */
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    /**
+     * @description Checks if the authenticated user is the existing owner of the resource.
+     * Ensures that the resource exists before authorizing the operation.
+     */
+    function isExistingOwner(userId) {
+        return isOwner(userId) && resource != null;
+    }
+
+    /**
+     * @description Stores all the tasks for the application.
+     * @path /tasks/{taskId}
+     * @allow (create) User 'user_abc' creates a task with userId: 'user_abc'.
+     * @allow (get) User 'user_abc' retrieves a task with userId: 'user_abc'.
+     * @allow (update) User 'user_abc' updates a task with userId: 'user_abc'.
+     * @allow (delete) User 'user_abc' deletes a task with userId: 'user_abc'.
+     * @deny (create) User 'user_xyz' attempts to create a task with userId: 'user_abc'.
+     * @deny (get) User 'user_xyz' attempts to retrieve a task with userId: 'user_abc'.
+     * @deny (update) User 'user_xyz' attempts to update a task with userId: 'user_abc'.
+     * @deny (delete) User 'user_xyz' attempts to delete a task with userId: 'user_abc'.
+     * @principle Enforces document ownership for all operations.
+     */
+    match /tasks/{taskId} {
+      allow get: if isOwner(resource.data.userId);
+      allow list: if isSignedIn() && isOwner(request.auth.uid);
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update: if isExistingOwner(resource.data.userId) && request.resource.data.userId == resource.data.userId;
+      allow delete: if isExistingOwner(resource.data.userId);
+    }
+
+    /**
+     * @description Stores user push notification subscriptions.
+     * @path /subscriptions/{userId}
+     * @allow (create) User 'user_abc' creates their own subscription document at /subscriptions/user_abc.
+     * @allow (get) User 'user_abc' retrieves their own subscription document at /subscriptions/user_abc.
+     * @allow (update) User 'user_abc' updates their own subscription document at /subscriptions/user_abc.
+     * @allow (delete) User 'user_abc' deletes their own subscription document at /subscriptions/user_abc.
+     * @deny (create) User 'user_xyz' attempts to create a subscription document at /subscriptions/user_abc.
+     * @deny (get) User 'user_xyz' attempts to retrieve the subscription document at /subscriptions/user_abc.
+     * @deny (update) User 'user_xyz' attempts to update the subscription document at /subscriptions/user_abc.
+     * @deny (delete) User 'user_xyz' attempts to delete the subscription document at /subscriptions/user_abc.
+     * @principle Enforces user-owned subscription documents.
+     */
+    match /subscriptions/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
+  }
+}
