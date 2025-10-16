@@ -33,12 +33,12 @@ import { getPrioritySuggestion, addCalendarEventAction } from "@/app/actions";
 import type { ReminderOption, Task } from "@/lib/types";
 
 const formSchema = z.object({
-  title: z.string().min(1, { message: "Title is required." }),
+  title: z.string().min(1, { message: "Title is required." }).max(50, { message: "Title must be 50 characters or less." }),
   description: z.string().optional(),
   dueDate: z.date().optional(),
   dueTime: z.string().optional().refine((time) => {
     if (!time) return true;
-    return /^([01]\\d|2[0-3]):([0-5]\\d)$/.test(time);
+    return /^([01]\d|2[0-3]):([0-5]\d)$/.test(time);
   }, { message: "Invalid time format (HH:MM)." }),
   priority: z.enum(["low", "medium", "high"]),
   reminder: z.enum(["none", "on-time", "10-min-before", "1-hour-before"]),
@@ -59,11 +59,11 @@ export default function AddTaskDialog() {
       title: "",
       description: "",
       priority: "medium",
-      dueTime: "09:00",
+      dueTime: "",
       reminder: "10-min-before",
     },
   });
-  
+
   const handleSuggestPriority = async () => {
     const description = form.getValues("description");
     if (!description) {
@@ -120,7 +120,7 @@ export default function AddTaskDialog() {
         createdAt: Timestamp.now(),
         notificationSent: false,
       };
-      
+
       const docRef = await addDoc(collection(db, "tasks"), newTask);
 
       if (dueDateWithTime) {
@@ -133,8 +133,8 @@ export default function AddTaskDialog() {
         // Don't await, let it run in the background
         addCalendarEventAction(serializableTask, user.uid).then(result => {
           if (result?.error) {
-              // Silently log the error or show a non-blocking toast
-              console.error("Failed to add to Google Calendar:", result.error);
+            // Silently log the error or show a non-blocking toast
+            console.error("Failed to add to Google Calendar:", result.error);
           }
         });
       }
@@ -173,9 +173,13 @@ export default function AddTaskDialog() {
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Title</FormLabel>
+                  <FormLabel>Title (max 50 characters)</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Finalize project report" {...field} />
+                    <Input
+                      placeholder="e.g., Finalize project report"
+                      maxLength={50}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -221,7 +225,7 @@ export default function AddTaskDialog() {
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                           initialFocus
                         />
                       </PopoverContent>
@@ -230,14 +234,14 @@ export default function AddTaskDialog() {
                   </FormItem>
                 )}
               />
-               <FormField
+              <FormField
                 control={form.control}
                 name="dueTime"
                 render={({ field }) => (
                   <FormItem className="flex flex-col justify-end">
-                    <FormLabel>Due Time</FormLabel>
+                    <FormLabel>Due Time (Optional)</FormLabel>
                     <FormControl>
-                      <Input type="time" {...field} className="h-10" />
+                      <Input type="time" {...field} className="h-10" placeholder="HH:MM" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -268,28 +272,28 @@ export default function AddTaskDialog() {
               )}
             />
             <FormField
-                control={form.control}
-                name="priority"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Priority</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select priority" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-             <Button type="button" variant="outline" size="sm" className="w-full gap-2" onClick={handleSuggestPriority} disabled={isSuggesting}>
+              control={form.control}
+              name="priority"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Priority</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="button" variant="outline" size="sm" className="w-full gap-2" onClick={handleSuggestPriority} disabled={isSuggesting}>
               {isSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-accent" />}
               Suggest Priority with AI
             </Button>

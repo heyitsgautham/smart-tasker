@@ -25,10 +25,10 @@ export default function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [sortOption, setSortOption] = useState<SortOption>("createdAt");
-  
+
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
 
@@ -56,17 +56,17 @@ export default function Home() {
   // Effect for checking reminders
   useEffect(() => {
     if (!user) return;
-  
+
     const checkReminders = async () => {
       const now = new Date();
       const pendingTasks = tasks.filter(t => !t.completed && t.dueDate && !t.notificationSent);
-  
+
       for (const task of pendingTasks) {
         if (!task.dueDate) continue;
-  
+
         const dueDate = task.dueDate.toDate();
         let reminderTime = null;
-  
+
         switch (task.reminder) {
           case 'on-time':
             reminderTime = dueDate;
@@ -80,15 +80,15 @@ export default function Home() {
           default:
             continue; // No reminder for this task
         }
-  
+
         if (now >= reminderTime) {
           console.log(`Sending reminder for task: ${task.title}`);
-          const { success, error } = await scheduleTaskNotification({ 
-            ...task, 
+          const { success, error } = await scheduleTaskNotification({
+            ...task,
             dueDate: task.dueDate.toDate().toISOString(),
             createdAt: task.createdAt.toDate().toISOString(),
           }, user.uid);
-          
+
           if (success) {
             // Mark notification as sent
             const taskDoc = doc(db, "tasks", task.id);
@@ -99,9 +99,9 @@ export default function Home() {
         }
       }
     };
-  
+
     const intervalId = setInterval(checkReminders, 1000); // Check every second
-  
+
     return () => clearInterval(intervalId);
   }, [tasks, user]);
 
@@ -111,7 +111,7 @@ export default function Home() {
 
     // Filter by status
     if (statusFilter !== "all") {
-      filtered = filtered.filter(task => 
+      filtered = filtered.filter(task =>
         statusFilter === "pending" ? !task.completed : task.completed
       );
     }
@@ -120,7 +120,7 @@ export default function Home() {
     if (priorityFilter !== "all") {
       filtered = filtered.filter(task => task.priority === priorityFilter);
     }
-    
+
     const priorityOrder: Record<TaskPriority, number> = { high: 2, medium: 1, low: 0 };
 
     // Sort
@@ -152,12 +152,12 @@ export default function Home() {
     const taskDoc = doc(db, "tasks", deletingTask.id);
     await deleteDoc(taskDoc);
     toast({
-        title: "Task Deleted",
-        description: `"${deletingTask.title}" has been successfully deleted.`,
+      title: "Task Deleted",
+      description: `"${deletingTask.title}" has been successfully deleted.`,
     });
     setDeletingTask(null);
   };
-  
+
   const handleEdit = (task: Task) => {
     setEditingTask(task);
   };
@@ -185,7 +185,7 @@ export default function Home() {
           </div>
           <AddTaskDialog />
         </div>
-        
+
         <div className="flex items-center gap-4 mb-8 flex-wrap">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-muted-foreground">Status:</span>
@@ -215,12 +215,12 @@ export default function Home() {
               </SelectContent>
             </Select>
           </div>
-          
+
           <Separator orientation="vertical" className="h-6" />
 
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium text-muted-foreground">Sort by:</span>
-             <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
+            <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
               <SelectTrigger className="w-[150px]">
                 <SelectValue placeholder="Sort by" />
               </SelectTrigger>
@@ -233,14 +233,14 @@ export default function Home() {
           </div>
         </div>
 
-        <TaskList 
-          tasks={filteredAndSortedTasks} 
+        <TaskList
+          tasks={filteredAndSortedTasks}
           loading={loading}
           onTaskUpdate={handleTaskUpdate}
           onTaskDelete={handleDeleteRequest}
           onTaskEdit={handleEdit}
         />
-        
+
         {editingTask && (
           <EditTaskDialog
             task={editingTask}

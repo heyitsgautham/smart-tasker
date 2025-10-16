@@ -37,18 +37,18 @@ export default function TaskList({ tasks, loading, onTaskUpdate, onTaskDelete, o
     return (
       <div className="flex justify-center items-center h-full min-h-[40vh]">
         <Alert className="max-w-md text-center">
-            <ListTodo className="h-4 w-4" />
-            <AlertTitle className="font-headline">No matching tasks!</AlertTitle>
-            <AlertDescription>
-                Your current filter settings didn't return any tasks. Try adjusting your filters.
-            </AlertDescription>
+          <ListTodo className="h-4 w-4" />
+          <AlertTitle className="font-headline">No matching tasks!</AlertTitle>
+          <AlertDescription>
+            Your current filter settings didn't return any tasks. Try adjusting your filters.
+          </AlertDescription>
         </Alert>
       </div>
     );
   }
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 auto-rows-fr">
       {tasks.map((task) => (
         <TaskCard
           key={task.id}

@@ -32,12 +32,12 @@ import type { Task, ReminderOption } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 
 const formSchema = z.object({
-  title: z.string().min(1, { message: "Title is required." }),
+  title: z.string().min(1, { message: "Title is required." }).max(50, { message: "Title must be 50 characters or less." }),
   description: z.string().optional(),
   dueDate: z.date().optional(),
   dueTime: z.string().optional().refine((time) => {
     if (!time) return true;
-    return /^([01]\\d|2[0-3]):([0-5]\\d)$/.test(time);
+    return /^([01]\d|2[0-3]):([0-5]\d)$/.test(time);
   }, { message: "Invalid time format (HH:MM)." }),
   priority: z.enum(["low", "medium", "high"]),
   reminder: z.enum(["none", "on-time", "10-min-before", "1-hour-before"]),
@@ -111,8 +111,8 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
 
   async function onSubmit(values: EditTaskFormValues) {
     if (!user) {
-        toast({ variant: "destructive", title: "You must be logged in." });
-        return;
+      toast({ variant: "destructive", title: "You must be logged in." });
+      return;
     }
     setIsSubmitting(true);
     try {
@@ -138,7 +138,7 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
       await updateDoc(taskDoc, updatedTaskData);
 
       if (dueDateWithTime) {
-         const serializableTask = {
+        const serializableTask = {
           ...task,
           ...updatedTaskData,
           dueDate: dueDateWithTime.toISOString(),
@@ -146,11 +146,11 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
         };
         addCalendarEventAction(serializableTask, user.uid).then(result => {
           if (result?.error) {
-              console.error("Failed to update Google Calendar event:", result.error);
+            console.error("Failed to update Google Calendar event:", result.error);
           }
-      });
+        });
       }
-      
+
       toast({
         title: "Task Updated",
         description: `"${values.title}" has been updated.`,
@@ -180,9 +180,13 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Title</FormLabel>
+                  <FormLabel>Title (max 50 characters)</FormLabel>
                   <FormControl>
-                    <Input placeholder="e.g., Finalize project report" {...field} />
+                    <Input
+                      placeholder="e.g., Finalize project report"
+                      maxLength={50}
+                      {...field}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -228,7 +232,7 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
                           mode="single"
                           selected={field.value}
                           onSelect={field.onChange}
-                          disabled={(date) => date < new Date(new Date().setHours(0,0,0,0))}
+                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
                           initialFocus
                         />
                       </PopoverContent>
@@ -237,7 +241,7 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
                   </FormItem>
                 )}
               />
-               <FormField
+              <FormField
                 control={form.control}
                 name="dueTime"
                 render={({ field }) => (
@@ -275,28 +279,28 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
               )}
             />
             <FormField
-                control={form.control}
-                name="priority"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Priority</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select priority" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        <SelectItem value="low">Low</SelectItem>
-                        <SelectItem value="medium">Medium</SelectItem>
-                        <SelectItem value="high">High</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-             <Button type="button" variant="outline" size="sm" className="w-full gap-2" onClick={handleSuggestPriority} disabled={isSuggesting}>
+              control={form.control}
+              name="priority"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Priority</FormLabel>
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select priority" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+            <Button type="button" variant="outline" size="sm" className="w-full gap-2" onClick={handleSuggestPriority} disabled={isSuggesting}>
               {isSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-accent" />}
               Suggest Priority with AI
             </Button>
