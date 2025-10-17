@@ -14,10 +14,10 @@ function initializeAdmin() {
     return;
   }
 
-  const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  const serviceAccountKey = process.env.SERVICE_ACCOUNT_KEY;
 
   if (!serviceAccountKey) {
-    console.error("FIREBASE_SERVICE_ACCOUNT_KEY is not set. Firebase Admin SDK is not initialized.");
+    console.error("SERVICE_ACCOUNT_KEY is not set. Firebase Admin SDK is not initialized.");
     return;
   }
 
@@ -36,7 +36,7 @@ function initializeAdmin() {
 
     console.log('Firebase Admin SDK initialized successfully');
   } catch (e) {
-    console.error("Failed to parse FIREBASE_SERVICE_ACCOUNT_KEY or initialize Firebase Admin SDK.", e);
+    console.error("Failed to parse SERVICE_ACCOUNT_KEY or initialize Firebase Admin SDK.", e);
     if (e instanceof Error) {
       console.error("Error details:", e.message);
       console.error("Stack trace:", e.stack);
