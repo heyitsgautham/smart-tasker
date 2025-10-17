@@ -33,7 +33,7 @@ interface TaskCardProps {
 const priorityStyles: Record<TaskPriority, string> = {
   high: "bg-priority-high text-white",
   medium: "bg-priority-medium text-white",
-  low: "bg-priority-low text-foreground",
+  low: "bg-priority-low text-white",
 };
 
 export default function TaskCard({ task, onUpdate, onDelete, onEdit }: TaskCardProps) {
@@ -96,9 +96,10 @@ export default function TaskCard({ task, onUpdate, onDelete, onEdit }: TaskCardP
   return (
     <Card
       className={cn(
-        "flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1 h-full",
+        "flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1 h-full cursor-pointer",
         task.completed && "bg-orange-100 border-2 border-orange-400 shadow-orange-200 shadow-md"
       )}
+      onClick={() => onEdit(task)}
     >
       <CardHeader className="flex flex-row items-start gap-4 space-y-0 pb-4">
         <Checkbox
@@ -106,11 +107,12 @@ export default function TaskCard({ task, onUpdate, onDelete, onEdit }: TaskCardP
           onCheckedChange={handleToggleComplete}
           aria-label="Mark task as complete"
           className="mt-1 flex-shrink-0"
+          onClick={(e) => e.stopPropagation()}
         />
         <div className="flex-1 min-w-0">
           <CardTitle
             className={cn(
-              "text-lg font-semibold font-headline break-words",
+              "text-xl font-bold font-headline break-words",
               task.completed && "line-through text-muted-foreground"
             )}
             style={{
@@ -129,7 +131,12 @@ export default function TaskCard({ task, onUpdate, onDelete, onEdit }: TaskCardP
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8 flex-shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 flex-shrink-0"
+              onClick={(e) => e.stopPropagation()}
+            >
               <MoreVertical className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
@@ -149,8 +156,8 @@ export default function TaskCard({ task, onUpdate, onDelete, onEdit }: TaskCardP
       <CardContent className="flex-grow pb-4">
         <CardDescription
           className={cn(
-            "break-words",
-            task.completed && "line-through text-muted-foreground/80"
+            "text-sm text-muted-foreground break-words",
+            task.completed && "line-through text-muted-foreground/70"
           )}
           style={{
             display: '-webkit-box',

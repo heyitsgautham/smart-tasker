@@ -5,28 +5,30 @@
 @layer base {
   :root {
     --background: 34 78% 90%;
-    --foreground: 20 14.3% 4.1%;
+    --foreground: 0 0% 15%;
     --card: 34 78% 95%;
-    --card-foreground: 20 14.3% 4.1%;
+    --card-foreground: 0 0% 15%;
     --popover: 0 0% 100%;
-    --popover-foreground: 20 14.3% 4.1%;
+    --popover-foreground: 0 0% 15%;
     --primary: 30 100% 60%;
-    --primary-foreground: 20 14.3% 4.1%;
+    --primary-foreground: 0 0% 15%;
     --secondary: 60 4.8% 95.9%;
     --secondary-foreground: 24 9.8% 10%;
     --muted: 60 4.8% 95.9%;
-    --muted-foreground: 25 5.3% 44.7%;
+    --muted-foreground: 0 0% 45%;
     --accent: 210 100% 70%;
     --accent-foreground: 24 9.8% 10%;
     --destructive: 30 100% 60%;
-    --destructive-foreground: 20 14.3% 4.1%;
+    --destructive-foreground: 0 0% 15%;
     --border: 34 78% 80%;
     --input: 34 78% 80%;
     --ring: 30 100% 60%;
     --radius: 0.5rem;
-    --priority-high: 20 90% 45%;
-    --priority-medium: 30 100% 65%;
-    --priority-low: 40 100% 75%;
+    --priority-high: 0 84% 60%;
+    --priority-medium: 33 100% 50%;
+    --priority-low: 198 70% 50%;
+    --link: 217 91% 60%;
+    --link-hover: 217 91% 50%;
   }
 
   .dark {
@@ -49,9 +51,11 @@
     --border: 12 6.5% 15.1%;
     --input: 12 6.5% 15.1%;
     --ring: 30 100% 60%;
-    --priority-high: 20 90% 45%;
-    --priority-medium: 30 100% 65%;
-    --priority-low: 40 100% 75%;
+    --priority-high: 0 84% 60%;
+    --priority-medium: 33 100% 50%;
+    --priority-low: 198 70% 50%;
+    --link: 217 91% 70%;
+    --link-hover: 217 91% 80%;
   }
 }
 

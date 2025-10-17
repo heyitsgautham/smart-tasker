@@ -6,7 +6,38 @@
     "hosting": {
         "source": ".",
         "frameworksBackend": {
-            "region": "us-central1"
-        }
+            "region": "asia-south1"
+        },
+        "headers": [
+            {
+                "source": "**/*.@(js|css|woff2|png|jpg|jpeg|svg|gif)",
+                "headers": [
+                    {
+                        "key": "Cache-Control",
+                        "value": "public, max-age=31536000, immutable"
+                    }
+                ]
+            },
+            {
+                "source": "**/*.html",
+                "headers": [
+                    {
+                        "key": "Cache-Control",
+                        "value": "no-cache"
+                    }
+                ]
+            }
+        ],
+        "rewrites": [
+            {
+                "source": "**",
+                "destination": "/index.html"
+            }
+        ],
+        "ignore": [
+            "firebase.json",
+            "**/.*",
+            "**/node_modules/**"
+        ]
     }
 }

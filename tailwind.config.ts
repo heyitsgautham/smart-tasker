@@ -1,4 +1,4 @@
-import type {Config} from 'tailwindcss';
+import type { Config } from 'tailwindcss';
 
 export default {
   content: [
@@ -55,6 +55,10 @@ export default {
           high: 'hsl(var(--priority-high))',
           medium: 'hsl(var(--priority-medium))',
           low: 'hsl(var(--priority-low))',
+        },
+        link: {
+          DEFAULT: 'hsl(var(--link))',
+          hover: 'hsl(var(--link-hover))',
         },
         border: 'hsl(var(--border))',
         input: 'hsl(var(--input))',

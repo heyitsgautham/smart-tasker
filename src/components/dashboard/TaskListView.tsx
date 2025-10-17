@@ -33,15 +33,15 @@ interface UndoState {
 }
 
 const priorityStyles: Record<TaskPriority, string> = {
-    high: "border-l-4 border-l-red-500",
-    medium: "border-l-4 border-l-orange-500",
-    low: "border-l-4 border-l-yellow-500",
+    high: "border-l-4 border-l-priority-high",
+    medium: "border-l-4 border-l-priority-medium",
+    low: "border-l-4 border-l-priority-low",
 };
 
 const priorityColors: Record<TaskPriority, string> = {
-    high: "text-red-600",
-    medium: "text-orange-600",
-    low: "text-yellow-600",
+    high: "text-priority-high",
+    medium: "text-priority-medium",
+    low: "text-priority-low",
 };
 
 export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTaskEdit }: TaskListViewProps) {
@@ -127,19 +127,10 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
         const date = task.dueDate.toDate();
         const isPastDue = isPast(date) && !isToday(date);
 
-        let dateText = "";
-        if (isToday(date)) {
-            dateText = "Today";
-        } else if (isTomorrow(date)) {
-            dateText = "Tomorrow";
-        } else {
-            dateText = format(date, "MMM d");
-        }
-
         const timeText = format(date, "h:mm a");
 
         return {
-            text: `${dateText} ${timeText}`,
+            timeText,
             isPastDue,
         };
     };
@@ -195,12 +186,12 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
                         <div key={groupKey} className="space-y-2">
                             {/* Group Header */}
                             <div className="flex items-center justify-between py-2">
-                                <h2 className="font-semibold text-sm flex items-center gap-2">
+                                <h2 className="font-bold text-xl flex items-center gap-2">
                                     {groupKey === "Overdue" && (
-                                        <span className="text-red-600">{groupKey}</span>
+                                        <span className="text-priority-high">{groupKey}</span>
                                     )}
                                     {groupKey !== "Overdue" && groupKey}
-                                    <span className="text-xs text-muted-foreground font-normal">
+                                    <span className="text-sm text-muted-foreground font-normal">
                                         {completedCount}/{totalCount}
                                     </span>
                                 </h2>
@@ -208,9 +199,9 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
                                     <RescheduleDialog
                                         trigger={
                                             <Button
-                                                variant="ghost"
+                                                variant="default"
                                                 size="sm"
-                                                className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                className="bg-link hover:bg-link-hover text-white font-bold"
                                                 onClick={() => {
                                                     setRescheduleGroup(groupTasks.filter(t => !t.completed));
                                                     setIsRescheduleOpen(true);
@@ -236,16 +227,18 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
                                         <div
                                             key={task.id}
                                             className={cn(
-                                                "group flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors",
+                                                "group flex items-center gap-3 p-3 rounded-lg bg-white/55 hover:bg-accent/30 transition-colors border border-border cursor-pointer",
                                                 task.completed && "bg-orange-50/50",
                                                 priorityStyles[task.priority]
                                             )}
+                                            onClick={() => onTaskEdit(task)}
                                         >
                                             {/* Checkbox */}
                                             <Checkbox
                                                 checked={task.completed}
                                                 onCheckedChange={() => handleToggleComplete(task)}
                                                 className="flex-shrink-0"
+                                                onClick={(e) => e.stopPropagation()}
                                             />
 
                                             {/* Task Content */}
@@ -253,17 +246,12 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
                                                 <div className="flex items-center gap-2 flex-wrap">
                                                     <span
                                                         className={cn(
-                                                            "font-medium text-sm",
+                                                            "font-bold text-base",
                                                             task.completed && "line-through text-muted-foreground"
                                                         )}
                                                     >
                                                         {task.title}
                                                     </span>
-                                                    {task.priority !== "low" && (
-                                                        <span className={cn("text-xs", priorityColors[task.priority])}>
-                                                            •
-                                                        </span>
-                                                    )}
                                                 </div>
                                                 {task.description && (
                                                     <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
@@ -272,17 +260,16 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
                                                 )}
                                             </div>
 
-                                            {/* Due Date */}
+                                            {/* Due Time */}
                                             {dueDateInfo && (
                                                 <div className="flex-shrink-0 hidden sm:flex items-center gap-1">
-                                                    <CalendarIcon className="h-3 w-3 text-muted-foreground" />
                                                     <span
                                                         className={cn(
-                                                            "text-xs",
-                                                            dueDateInfo.isPastDue ? "text-red-600" : "text-muted-foreground"
+                                                            "text-sm font-semibold",
+                                                            dueDateInfo.isPastDue ? "text-priority-high" : "text-foreground"
                                                         )}
                                                     >
-                                                        {dueDateInfo.text}
+                                                        {dueDateInfo.timeText}
                                                     </span>
                                                 </div>
                                             )}
@@ -294,6 +281,7 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
                                                         variant="ghost"
                                                         size="icon"
                                                         className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                                        onClick={(e) => e.stopPropagation()}
                                                     >
                                                         <MoreHorizontal className="h-4 w-4" />
                                                     </Button>

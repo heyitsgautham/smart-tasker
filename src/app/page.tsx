@@ -66,10 +66,10 @@ export default function Home() {
 
     const checkReminders = async () => {
       const now = new Date();
-      const pendingTasks = tasks.filter(t => 
-        !t.completed && 
-        t.dueDate && 
-        !t.notificationSent && 
+      const pendingTasks = tasks.filter(t =>
+        !t.completed &&
+        t.dueDate &&
+        !t.notificationSent &&
         !notifiedTaskIds.has(t.id) // Don't re-send if already sent in this session
       );
 
@@ -95,10 +95,10 @@ export default function Home() {
 
         if (now >= reminderTime) {
           console.log(`Sending reminder for task: ${task.title}`);
-          
+
           // Mark as notified immediately to prevent duplicate sends
           notifiedTaskIds.add(task.id);
-          
+
           const { success, error } = await scheduleTaskNotification({
             ...task,
             dueDate: task.dueDate.toDate().toISOString(),
@@ -120,7 +120,7 @@ export default function Home() {
 
     // Check every 60 seconds instead of every second to reduce load
     const intervalId = setInterval(checkReminders, 60000);
-    
+
     // Also check immediately on mount
     checkReminders();
 

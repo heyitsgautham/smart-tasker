@@ -84,5 +84,26 @@ service cloud.firestore {
       allow update: if isExistingOwner(userId);
       allow delete: if isExistingOwner(userId);
     }
+
+    /**
+     * @description Stores Google Calendar OAuth tokens for users.
+     * @path /googleCalendarTokens/{userId}
+     * @allow (create) User 'user_abc' creates their own token document at /googleCalendarTokens/user_abc.
+     * @allow (get) User 'user_abc' retrieves their own token document at /googleCalendarTokens/user_abc.
+     * @allow (update) User 'user_abc' updates their own token document at /googleCalendarTokens/user_abc.
+     * @allow (delete) User 'user_abc' deletes their own token document at /googleCalendarTokens/user_abc.
+     * @deny (create) User 'user_xyz' attempts to create a token document at /googleCalendarTokens/user_abc.
+     * @deny (get) User 'user_xyz' attempts to retrieve the token document at /googleCalendarTokens/user_abc.
+     * @deny (update) User 'user_xyz' attempts to update the token document at /googleCalendarTokens/user_abc.
+     * @deny (delete) User 'user_xyz' attempts to delete the token document at /googleCalendarTokens/user_abc.
+     * @principle Enforces user-owned calendar token documents.
+     */
+    match /googleCalendarTokens/{userId} {
+      allow get: if isOwner(userId);
+      allow list: if false;
+      allow create: if isOwner(userId);
+      allow update: if isExistingOwner(userId);
+      allow delete: if isExistingOwner(userId);
+    }
   }
 }
