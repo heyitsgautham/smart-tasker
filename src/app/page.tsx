@@ -113,15 +113,23 @@ export default function Home() {
             continue; // No reminder for this task
         }
 
-        // Send notification 15 seconds early to account for processing time
-        // This ensures the notification arrives right at the intended time
-        const adjustedReminderTime = new Date(reminderTime.getTime() - 15000);
+        // Calculate how much time until the reminder
+        const timeUntilReminder = reminderTime.getTime() - now.getTime();
+        
+        // Send notification if we're within 30 seconds before the reminder time
+        // This gives us a buffer to send early, but not too early
+        // The notification will arrive right at or slightly before the scheduled time
+        const shouldSend = timeUntilReminder <= 30000 && timeUntilReminder >= -5000; // -5s to +30s window
+        
+        // Mark as missed if we're more than 5 minutes past
+        const isMissed = timeUntilReminder < -5 * 60 * 1000;
 
-        // Check if we're within the sending window (15 seconds before to 5 minutes after)
-        const timeDiff = now.getTime() - adjustedReminderTime.getTime();
-        const withinWindow = timeDiff >= 0 && timeDiff <= 5 * 60 * 1000; // 0 to 5 minutes
+        if (shouldSend) {
+          console.log(`⏰ Sending reminder for task: ${task.title}`);
+          console.log(`📅 Due time: ${reminderTime.toLocaleString()}`);
+          console.log(`🕐 Current time: ${now.toLocaleString()}`);
+          console.log(`⏱️  Time to due: ${(timeUntilReminder / 1000).toFixed(1)}s`);
 
-        if (withinWindow) {
           // Mark as notified immediately to prevent duplicate sends
           notifiedTaskIds.add(task.id);
 
@@ -132,15 +140,18 @@ export default function Home() {
           }, user.uid);
 
           if (success) {
+            console.log(`✅ Notification sent successfully for task: ${task.title}`);
             // Mark notification as sent in Firestore
             const taskDoc = doc(db, "tasks", task.id);
             await updateDoc(taskDoc, { notificationSent: true });
           } else if (error) {
+            console.error(`❌ Failed to send reminder for task "${task.title}":`, error);
             // Remove from notified set if sending failed, so it can be retried
             notifiedTaskIds.delete(task.id);
           }
-        } else if (timeDiff > 5 * 60 * 1000) {
+        } else if (isMissed) {
           // If we're more than 5 minutes past the reminder time, mark it as missed
+          console.log(`⏭️  Missed notification window for task: ${task.title}`);
           const taskDoc = doc(db, "tasks", task.id);
           await updateDoc(taskDoc, { notificationSent: true });
           notifiedTaskIds.add(task.id);
@@ -153,14 +164,16 @@ export default function Home() {
       const now = new Date();
       const seconds = now.getSeconds();
       const milliseconds = now.getMilliseconds();
-
+      
       // Calculate milliseconds until the next minute starts
       const msUntilNextMinute = (60 - seconds) * 1000 - milliseconds;
-
+      
+      console.log(`⏲️  Next reminder check in ${(msUntilNextMinute / 1000).toFixed(1)}s (at ${new Date(now.getTime() + msUntilNextMinute).toLocaleTimeString()})`);
+      
       // Schedule check at the start of the next minute
       timeoutId = setTimeout(() => {
         checkReminders();
-
+        
         // After first aligned check, set up interval for every minute
         intervalId = setInterval(checkReminders, 60000);
       }, msUntilNextMinute);
@@ -168,7 +181,7 @@ export default function Home() {
 
     // Check immediately on mount (might catch tasks due right now)
     checkReminders();
-
+    
     // Schedule aligned checks
     scheduleNextCheck();
 

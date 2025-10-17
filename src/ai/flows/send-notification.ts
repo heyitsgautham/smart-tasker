@@ -62,12 +62,12 @@ const sendNotificationFlow = ai.defineFlow(
       );
 
       console.log('Sending push notification with payload:', payload);
-
+      
       const result = await webpush.sendNotification(
         subscription,
         JSON.stringify(payload)
       );
-
+      
       console.log('Push notification sent successfully:', result);
     } catch (error: any) {
       console.error("Error sending push notification inside flow:", error);
