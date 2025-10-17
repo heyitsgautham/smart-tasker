@@ -27,7 +27,7 @@ import { SmartTextarea } from "@/components/ui/smart-textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn, formatDate } from "@/lib/utils";
 import { db } from "@/lib/firebase";
-import { getPrioritySuggestion, addCalendarEventAction } from "@/app/actions";
+import { getPrioritySuggestion, addCalendarEventAction, updateCalendarEventAction } from "@/app/actions";
 import type { Task, ReminderOption } from "@/lib/types";
 import { useAuth } from "@/context/AuthContext";
 
@@ -137,6 +137,7 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
       const taskDoc = doc(db, "tasks", task.id);
       await updateDoc(taskDoc, updatedTaskData);
 
+      // Handle calendar event synchronization
       if (dueDateWithTime) {
         const serializableTask = {
           ...task,
@@ -144,11 +145,37 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
           dueDate: dueDateWithTime.toISOString(),
           createdAt: task.createdAt.toDate().toISOString(),
         };
-        addCalendarEventAction(serializableTask, user.uid).then(result => {
-          if (result?.error) {
-            console.error("Failed to update Google Calendar event:", result.error);
-          }
-        });
+
+        console.log('EditTaskDialog - Task has calendarEventId:', task.calendarEventId);
+        console.log('EditTaskDialog - Serializable task:', serializableTask);
+
+        if (task.calendarEventId) {
+          // Update existing calendar event
+          console.log('EditTaskDialog - Updating existing calendar event');
+          updateCalendarEventAction(serializableTask, user.uid).then(result => {
+            if (result?.error) {
+              console.error("Failed to update Google Calendar event:", result.error);
+            } else {
+              console.log("Successfully updated calendar event");
+            }
+          });
+        } else {
+          // Add new calendar event
+          console.log('EditTaskDialog - Adding new calendar event');
+          addCalendarEventAction(serializableTask, user.uid).then(async (result) => {
+            if (result?.success && result.eventId) {
+              // Update the task with the calendar event ID
+              console.log('EditTaskDialog - Storing calendar event ID:', result.eventId);
+              await updateDoc(taskDoc, { calendarEventId: result.eventId });
+            } else if (result?.error) {
+              console.error("Failed to add to Google Calendar:", result.error);
+            }
+          });
+        }
+      } else if (!dueDateWithTime && task.calendarEventId) {
+        // Due date was removed, but we don't delete the calendar event
+        // Just remove the calendarEventId from the task
+        await updateDoc(taskDoc, { calendarEventId: null });
       }
 
       toast({

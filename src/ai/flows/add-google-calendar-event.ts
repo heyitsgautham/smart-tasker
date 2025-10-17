@@ -14,6 +14,7 @@ const AddGoogleCalendarEventInputSchema = z.object({
     title: z.string(),
     description: z.string(),
     dueDate: z.string(), // ISO string
+    priority: z.enum(["low", "medium", "high"]),
   }),
 });
 export type AddGoogleCalendarEventInput = z.infer<typeof AddGoogleCalendarEventInputSchema>;
@@ -23,7 +24,9 @@ const addGoogleCalendarEventFlow = ai.defineFlow(
   {
     name: 'addGoogleCalendarEventFlow',
     inputSchema: AddGoogleCalendarEventInputSchema,
-    outputSchema: z.void(),
+    outputSchema: z.object({
+      eventId: z.string(),
+    }),
   },
   async ({ userId, task }) => {
     if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET || !process.env.GOOGLE_REDIRECT_URI) {
@@ -81,6 +84,13 @@ const addGoogleCalendarEventFlow = ai.defineFlow(
 
     const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
+    // Map priority to Google Calendar color ID
+    const colorIdMap = {
+      low: '2', // sage (green)
+      medium: '5', // banana (yellow)
+      high: '11', // tomato (red)
+    };
+
     const event = {
       summary: task.title,
       description: task.description,
@@ -92,13 +102,15 @@ const addGoogleCalendarEventFlow = ai.defineFlow(
         dateTime: task.dueDate, // For tasks, start and end can be the same
         timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       },
+      colorId: colorIdMap[task.priority],
     };
 
     try {
-      await calendar.events.insert({
+      const response = await calendar.events.insert({
         calendarId: 'primary',
         requestBody: event,
       });
+      return { eventId: response.data.id! };
     } catch (error) {
       console.error('Error creating calendar event:', error);
       throw new Error('Failed to create event in Google Calendar.');
@@ -107,6 +119,6 @@ const addGoogleCalendarEventFlow = ai.defineFlow(
 );
 
 
-export async function addGoogleCalendarEvent(input: AddGoogleCalendarEventInput): Promise<void> {
+export async function addGoogleCalendarEvent(input: AddGoogleCalendarEventInput): Promise<{ eventId: string }> {
   return addGoogleCalendarEventFlow(input);
 }

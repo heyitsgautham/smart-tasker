@@ -4,6 +4,7 @@
 import { suggestPriority } from "@/ai/flows/ai-suggested-priority";
 import { sendNotification } from "@/ai/flows/send-notification";
 import { addGoogleCalendarEvent } from "@/ai/flows/add-google-calendar-event";
+import { updateGoogleCalendarEvent } from "@/ai/flows/update-google-calendar-event";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { getDb } from "@/lib/firebase-admin";
@@ -137,27 +138,64 @@ export async function exchangeCodeForTokens(userId: string, code: string): Promi
 }
 
 
-export async function addCalendarEventAction(task: SerializableTask, userId: string) {
+export async function addCalendarEventAction(task: SerializableTask, userId: string): Promise<{ success: boolean; eventId?: string; error?: string }> {
   try {
     if (!userId) {
       throw new Error("User not authenticated.");
     }
     if (!task.dueDate) {
-      return { error: "Task has no due date." };
+      return { success: false, error: "Task has no due date." };
     }
 
-    await addGoogleCalendarEvent({
+    console.log(`Adding calendar event for task ${task.id}`);
+
+    const result = await addGoogleCalendarEvent({
       userId,
       task: {
         title: task.title,
         description: task.description || "",
         dueDate: task.dueDate,
+        priority: task.priority,
+      },
+    });
+
+    console.log(`Calendar event created with ID: ${result.eventId}`);
+    return { success: true, eventId: result.eventId };
+  } catch (error: any) {
+    console.error("Error adding calendar event:", error);
+    return { success: false, error: error.message || "Failed to add task to Google Calendar." };
+  }
+}
+
+export async function updateCalendarEventAction(task: SerializableTask, userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!userId) {
+      throw new Error("User not authenticated.");
+    }
+    if (!task.dueDate) {
+      return { success: false, error: "Task has no due date." };
+    }
+    if (!task.calendarEventId) {
+      console.error("Update calendar event called but task has no calendarEventId:", task.id);
+      return { success: false, error: "Task has no calendar event ID." };
+    }
+
+    console.log(`Updating calendar event ${task.calendarEventId} for task ${task.id}`);
+
+    await updateGoogleCalendarEvent({
+      userId,
+      eventId: task.calendarEventId,
+      task: {
+        title: task.title,
+        description: task.description || "",
+        dueDate: task.dueDate,
+        priority: task.priority,
       },
     });
     return { success: true };
   } catch (error: any) {
-    console.error("Error adding calendar event:", error);
-    return { error: error.message || "Failed to add task to Google Calendar." };
+    console.error("Error updating calendar event:", error);
+    return { success: false, error: error.message || "Failed to update task in Google Calendar." };
   }
 }
 
@@ -205,11 +243,17 @@ export async function syncAllTasksToCalendar(userId: string) {
     const errors: string[] = [];
 
     // Process each task
-    for (const doc of tasksSnapshot.docs) {
-      const taskData = doc.data();
+    for (const docSnap of tasksSnapshot.docs) {
+      const taskData = docSnap.data();
 
       // Skip tasks without due dates
       if (!taskData.dueDate) {
+        skipped++;
+        continue;
+      }
+
+      // Skip tasks that already have a calendar event ID
+      if (taskData.calendarEventId) {
         skipped++;
         continue;
       }
@@ -220,14 +264,20 @@ export async function syncAllTasksToCalendar(userId: string) {
           taskData.dueDate.toDate().toISOString() :
           taskData.dueDate;
 
-        await addGoogleCalendarEvent({
+        const result = await addGoogleCalendarEvent({
           userId,
           task: {
             title: taskData.title,
             description: taskData.description || "",
             dueDate: dueDate,
+            priority: taskData.priority || "medium",
           },
         });
+
+        // Store the calendar event ID in Firestore
+        if (result.eventId) {
+          await docSnap.ref.update({ calendarEventId: result.eventId });
+        }
 
         synced++;
       } catch (error: any) {
@@ -243,7 +293,7 @@ export async function syncAllTasksToCalendar(userId: string) {
       skipped,
       failed,
       errors: failed > 0 ? errors : undefined,
-      message: `Synced ${synced} task(s) to Google Calendar. ${skipped} task(s) skipped (no due date). ${failed > 0 ? `${failed} task(s) failed.` : ''}`
+      message: `Synced ${synced} task(s) to Google Calendar. ${skipped} task(s) skipped (no due date or already synced). ${failed > 0 ? `${failed} task(s) failed.` : ''}`
     };
 
   } catch (error: any) {

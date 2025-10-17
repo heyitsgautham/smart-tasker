@@ -18,12 +18,18 @@ import type { TaskPriority } from "@/lib/types";
 import { format, isToday, isTomorrow, isPast } from "date-fns";
 import RescheduleDialog from "./RescheduleDialog";
 import { Timestamp } from "firebase/firestore";
+import { useToast } from "@/hooks/use-toast";
 
 interface TaskListViewProps {
     tasks: Task[];
     onTaskUpdate: (id: string, updates: Partial<Task>) => void;
     onTaskDelete: (task: Task) => void;
     onTaskEdit: (task: Task) => void;
+}
+
+interface UndoState {
+    previousDates: Record<string, Timestamp | null>;
+    newDate: Timestamp | null;
 }
 
 const priorityStyles: Record<TaskPriority, string> = {
@@ -39,22 +45,80 @@ const priorityColors: Record<TaskPriority, string> = {
 };
 
 export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTaskEdit }: TaskListViewProps) {
+    const { toast } = useToast();
     const [isRescheduleOpen, setIsRescheduleOpen] = useState(false);
     const [rescheduleGroup, setRescheduleGroup] = useState<Task[] | null>(null);
+    const [undoState, setUndoState] = useState<UndoState | null>(null);
 
     const handleToggleComplete = (task: Task) => {
         onTaskUpdate(task.id, { completed: !task.completed });
     };
 
+    const formatDateForDisplay = (date: Date | null): string => {
+        if (!date) return "No Date";
+        if (isToday(date)) return "Today";
+        if (isTomorrow(date)) return "Tomorrow";
+        return format(date, "MMM d");
+    };
+
     const handleReschedule = (taskIds: string[], newDate: Date | null) => {
+        // Store previous dates for undo
+        const previousDates: Record<string, Timestamp | null> = {};
+        taskIds.forEach(id => {
+            const task = tasks.find(t => t.id === id);
+            if (task) {
+                previousDates[id] = task.dueDate;
+            }
+        });
+
+        // Update tasks with new date
         taskIds.forEach(id => {
             onTaskUpdate(id, {
                 dueDate: newDate ? Timestamp.fromDate(newDate) : null,
                 notificationSent: false, // Reset notification status
             });
         });
+
+        // Create display text for undo notification
+        const displayText = `Date updated to ${formatDateForDisplay(newDate)}`;
+
+        // Store undo state
+        const undoData: UndoState = {
+            previousDates,
+            newDate: newDate ? Timestamp.fromDate(newDate) : null,
+        };
+
+        setUndoState(undoData);
+
+        // Show toast with undo action
+        toast({
+            description: displayText,
+            action: (
+                <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleUndo(undoData)}
+                    className="h-8"
+                >
+                    Undo
+                </Button>
+            ),
+        });
+
         setIsRescheduleOpen(false);
         setRescheduleGroup(null);
+    };
+
+    const handleUndo = (undoData: UndoState) => {
+        // Restore previous dates
+        Object.entries(undoData.previousDates).forEach(([taskId, previousDate]) => {
+            onTaskUpdate(taskId, {
+                dueDate: previousDate,
+                notificationSent: false,
+            });
+        });
+
+        setUndoState(null);
     };
 
     const formatDueDate = (task: Task) => {

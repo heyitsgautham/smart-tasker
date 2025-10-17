@@ -14,4 +14,5 @@ export interface Task {
   completed: boolean;
   createdAt: Timestamp;
   notificationSent?: boolean;
+  calendarEventId?: string;
 }

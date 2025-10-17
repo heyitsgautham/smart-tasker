@@ -6,7 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { CalendarIcon, Loader2, Sparkles } from "lucide-react";
-import { addDoc, collection, Timestamp } from "firebase/firestore";
+import { addDoc, collection, Timestamp, updateDoc } from "firebase/firestore";
 import { setHours, setMinutes, format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
@@ -130,10 +130,12 @@ export default function AddTaskDialog() {
           dueDate: dueDateWithTime.toISOString(),
           createdAt: newTask.createdAt.toDate().toISOString(),
         };
-        // Don't await, let it run in the background
-        addCalendarEventAction(serializableTask, user.uid).then(result => {
-          if (result?.error) {
-            // Silently log the error or show a non-blocking toast
+        // Add to calendar and store the event ID
+        addCalendarEventAction(serializableTask, user.uid).then(async (result) => {
+          if (result?.success && result.eventId) {
+            // Update the task with the calendar event ID
+            await updateDoc(docRef, { calendarEventId: result.eventId });
+          } else if (result?.error) {
             console.error("Failed to add to Google Calendar:", result.error);
           }
         });
