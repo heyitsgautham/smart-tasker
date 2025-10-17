@@ -5,8 +5,6 @@ import { suggestPriority } from "@/ai/flows/ai-suggested-priority";
 import { sendNotification } from "@/ai/flows/send-notification";
 import { addGoogleCalendarEvent } from "@/ai/flows/add-google-calendar-event";
 import { updateGoogleCalendarEvent } from "@/ai/flows/update-google-calendar-event";
-import { doc, getDoc, setDoc } from "firebase/firestore";
-import { db } from "@/lib/firebase";
 import { getDb } from "@/lib/firebase-admin";
 import type { PushSubscription } from "web-push";
 import type { Task } from "@/lib/types";
@@ -41,14 +39,19 @@ export async function scheduleTaskNotification(task: SerializableTask, userId: s
   }
 
   try {
-    const subRef = doc(db, `subscriptions/${userId}`);
-    const subDoc = await getDoc(subRef);
+    const db = await getDb();
+    const subRef = db.collection('subscriptions').doc(userId);
+    const subDoc = await subRef.get();
 
-    if (subDoc.exists()) {
+    if (subDoc.exists) {
       const subscription = subDoc.data() as PushSubscription;
 
       await sendNotification({
-        subscription,
+        subscription: {
+          endpoint: subscription.endpoint,
+          keys: subscription.keys,
+          expirationTime: subscription.expirationTime ?? null,
+        },
         payload: {
           title: `Task Reminder: ${task.title}`,
           body: `Your task "${task.title}" is due now.`,
@@ -62,9 +65,9 @@ export async function scheduleTaskNotification(task: SerializableTask, userId: s
   } catch (error) {
     console.error("Error scheduling notification:", error);
     if (error instanceof Error) {
-      throw error;
+      return { success: false, error: error.message };
     }
-    throw new Error('Failed to schedule notification.');
+    return { success: false, error: 'Failed to schedule notification.' };
   }
 }
 

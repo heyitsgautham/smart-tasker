@@ -61,9 +61,17 @@ export default function Home() {
   useEffect(() => {
     if (!user) return;
 
+    // Track which tasks have already had notifications sent in this session
+    const notifiedTaskIds = new Set<string>();
+
     const checkReminders = async () => {
       const now = new Date();
-      const pendingTasks = tasks.filter(t => !t.completed && t.dueDate && !t.notificationSent);
+      const pendingTasks = tasks.filter(t => 
+        !t.completed && 
+        t.dueDate && 
+        !t.notificationSent && 
+        !notifiedTaskIds.has(t.id) // Don't re-send if already sent in this session
+      );
 
       for (const task of pendingTasks) {
         if (!task.dueDate) continue;
@@ -87,6 +95,10 @@ export default function Home() {
 
         if (now >= reminderTime) {
           console.log(`Sending reminder for task: ${task.title}`);
+          
+          // Mark as notified immediately to prevent duplicate sends
+          notifiedTaskIds.add(task.id);
+          
           const { success, error } = await scheduleTaskNotification({
             ...task,
             dueDate: task.dueDate.toDate().toISOString(),
@@ -94,17 +106,23 @@ export default function Home() {
           }, user.uid);
 
           if (success) {
-            // Mark notification as sent
+            // Mark notification as sent in Firestore
             const taskDoc = doc(db, "tasks", task.id);
             await updateDoc(taskDoc, { notificationSent: true });
           } else if (error) {
             console.error(`Failed to send reminder for task "${task.title}":`, error);
+            // Remove from notified set if sending failed, so it can be retried
+            notifiedTaskIds.delete(task.id);
           }
         }
       }
     };
 
-    const intervalId = setInterval(checkReminders, 1000); // Check every second
+    // Check every 60 seconds instead of every second to reduce load
+    const intervalId = setInterval(checkReminders, 60000);
+    
+    // Also check immediately on mount
+    checkReminders();
 
     return () => clearInterval(intervalId);
   }, [tasks, user]);
