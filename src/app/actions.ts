@@ -46,18 +46,29 @@ export async function scheduleTaskNotification(task: SerializableTask, userId: s
     if (subDoc.exists) {
       const subscription = subDoc.data() as PushSubscription;
 
-      await sendNotification({
-        subscription: {
-          endpoint: subscription.endpoint,
-          keys: subscription.keys,
-          expirationTime: subscription.expirationTime ?? null,
-        },
-        payload: {
-          title: `Task Reminder: ${task.title}`,
-          body: `Your task "${task.title}" is due now.`,
-        },
-      });
-      return { success: true };
+      try {
+        await sendNotification({
+          subscription: {
+            endpoint: subscription.endpoint,
+            keys: subscription.keys,
+            expirationTime: subscription.expirationTime ?? null,
+          },
+          payload: {
+            title: `Task Reminder: ${task.title}`,
+            body: `Your task "${task.title}" is due now.`,
+          },
+        });
+        return { success: true };
+      } catch (notificationError: any) {
+        // If subscription has expired (410 error), remove it from database
+        if (notificationError?.statusCode === 410 || notificationError?.message === 'SUBSCRIPTION_EXPIRED') {
+          console.log(`Removing expired push subscription for user: ${userId}`);
+          await subRef.delete();
+          return { success: false, error: "Push subscription has expired. Please re-subscribe to notifications." };
+        }
+        // Re-throw other errors
+        throw notificationError;
+      }
     } else {
       console.log("No push subscription found for user:", userId);
       return { success: false, error: "No push subscription found." };

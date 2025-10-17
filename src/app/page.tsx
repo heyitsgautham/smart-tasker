@@ -57,14 +57,34 @@ export default function Home() {
     return () => unsubscribe();
   }, [user]);
 
-  // Effect for checking reminders
+  // Effect for checking reminders with optimized timing
   useEffect(() => {
     if (!user) return;
 
     // Track which tasks have already had notifications sent in this session
     const notifiedTaskIds = new Set<string>();
+    let intervalId: NodeJS.Timeout | null = null;
+    let timeoutId: NodeJS.Timeout | null = null;
 
     const checkReminders = async () => {
+      // First check if user is subscribed to notifications
+      if ('serviceWorker' in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.ready;
+          const subscription = await registration.pushManager.getSubscription();
+          if (!subscription) {
+            // User is not subscribed, skip notification checks
+            return;
+          }
+        } catch (error) {
+          console.error("Error checking subscription status:", error);
+          return;
+        }
+      } else {
+        // Service workers not supported, can't send notifications
+        return;
+      }
+
       const now = new Date();
       const pendingTasks = tasks.filter(t =>
         !t.completed &&
@@ -93,9 +113,15 @@ export default function Home() {
             continue; // No reminder for this task
         }
 
-        if (now >= reminderTime) {
-          console.log(`Sending reminder for task: ${task.title}`);
+        // Send notification 15 seconds early to account for processing time
+        // This ensures the notification arrives right at the intended time
+        const adjustedReminderTime = new Date(reminderTime.getTime() - 15000);
 
+        // Check if we're within the sending window (15 seconds before to 5 minutes after)
+        const timeDiff = now.getTime() - adjustedReminderTime.getTime();
+        const withinWindow = timeDiff >= 0 && timeDiff <= 5 * 60 * 1000; // 0 to 5 minutes
+
+        if (withinWindow) {
           // Mark as notified immediately to prevent duplicate sends
           notifiedTaskIds.add(task.id);
 
@@ -110,21 +136,46 @@ export default function Home() {
             const taskDoc = doc(db, "tasks", task.id);
             await updateDoc(taskDoc, { notificationSent: true });
           } else if (error) {
-            console.error(`Failed to send reminder for task "${task.title}":`, error);
             // Remove from notified set if sending failed, so it can be retried
             notifiedTaskIds.delete(task.id);
           }
+        } else if (timeDiff > 5 * 60 * 1000) {
+          // If we're more than 5 minutes past the reminder time, mark it as missed
+          const taskDoc = doc(db, "tasks", task.id);
+          await updateDoc(taskDoc, { notificationSent: true });
+          notifiedTaskIds.add(task.id);
         }
       }
     };
 
-    // Check every 60 seconds instead of every second to reduce load
-    const intervalId = setInterval(checkReminders, 60000);
+    // Smart scheduling: align checks to the start of each minute
+    const scheduleNextCheck = () => {
+      const now = new Date();
+      const seconds = now.getSeconds();
+      const milliseconds = now.getMilliseconds();
 
-    // Also check immediately on mount
+      // Calculate milliseconds until the next minute starts
+      const msUntilNextMinute = (60 - seconds) * 1000 - milliseconds;
+
+      // Schedule check at the start of the next minute
+      timeoutId = setTimeout(() => {
+        checkReminders();
+
+        // After first aligned check, set up interval for every minute
+        intervalId = setInterval(checkReminders, 60000);
+      }, msUntilNextMinute);
+    };
+
+    // Check immediately on mount (might catch tasks due right now)
     checkReminders();
 
-    return () => clearInterval(intervalId);
+    // Schedule aligned checks
+    scheduleNextCheck();
+
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+      if (timeoutId) clearTimeout(timeoutId);
+    };
   }, [tasks, user]);
 
 

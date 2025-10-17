@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { CalendarIcon, Loader2, Sparkles } from "lucide-react";
+import { CalendarIcon, Loader2, Sparkles, X } from "lucide-react";
 import { doc, updateDoc, Timestamp } from "firebase/firestore";
 import { setHours, setMinutes, format } from "date-fns";
 
@@ -54,6 +54,8 @@ interface EditTaskDialogProps {
 export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [manuallySetTime, setManuallySetTime] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -68,7 +70,7 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
   });
 
   useEffect(() => {
-    if (task) {
+    if (task && isOpen) {
       form.reset({
         title: task.title,
         description: task.description,
@@ -77,8 +79,16 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
         dueDate: task.dueDate ? task.dueDate.toDate() : undefined,
         dueTime: task.dueDate ? format(task.dueDate.toDate(), 'HH:mm') : undefined
       });
+      // If task has a due date/time, mark it as manually set to prevent auto-override
+      setManuallySetTime(!!task.dueDate);
+      setIsInitialLoad(true);
+
+      // After a short delay, allow auto-detection for new edits
+      setTimeout(() => {
+        setIsInitialLoad(false);
+      }, 100);
     }
-  }, [task, form]);
+  }, [task, isOpen, form]);
 
   const handleSuggestPriority = async () => {
     const description = form.getValues("description");
@@ -229,8 +239,16 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
                     <SmartTextarea
                       placeholder="Add more details about your task..."
                       {...field}
+                      onChange={(e) => {
+                        // When user types in description, allow auto-detection again
+                        if (!isInitialLoad) {
+                          setManuallySetTime(false);
+                        }
+                        field.onChange(e);
+                      }}
                       onDateDetected={(date) => {
-                        if (date) {
+                        // Don't auto-update during initial load or if user manually set time via time field
+                        if (date && !isInitialLoad && !manuallySetTime) {
                           form.setValue("dueDate", date);
                           form.setValue("dueTime", format(date, 'HH:mm'));
                         }
@@ -248,31 +266,46 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
                 render={({ field }) => (
                   <FormItem className="flex flex-col justify-end">
                     <FormLabel>Due Date</FormLabel>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <FormControl>
-                          <Button
-                            variant={"outline"}
-                            className={cn(
-                              "pl-3 text-left font-normal",
-                              !field.value && "text-muted-foreground"
-                            )}
-                          >
-                            {field.value ? formatDate(field.value, 'PPP') : <span>Pick a date</span>}
-                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                          </Button>
-                        </FormControl>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0" align="start">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={field.onChange}
-                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
+                    <div className="relative">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? formatDate(field.value, 'PPP') : <span>Pick a date</span>}
+                              {field.value ? (
+                                <span
+                                  className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded-sm hover:bg-destructive/10 cursor-pointer shrink-0"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    field.onChange(undefined);
+                                    form.setValue("dueTime", undefined);
+                                  }}
+                                >
+                                  <X className="h-4 w-4" />
+                                </span>
+                              ) : (
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                              )}
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -283,9 +316,35 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
                 render={({ field }) => (
                   <FormItem className="flex flex-col justify-end">
                     <FormLabel>Due Time</FormLabel>
-                    <FormControl>
-                      <Input type="time" {...field} value={field.value || ''} className="h-10" />
-                    </FormControl>
+                    <div className="relative">
+                      <FormControl>
+                        <Input
+                          type="time"
+                          {...field}
+                          value={field.value || ''}
+                          className="h-10"
+                          onChange={(e) => {
+                            // Mark that user manually set the time
+                            setManuallySetTime(true);
+                            field.onChange(e);
+                          }}
+                        />
+                      </FormControl>
+                      {field.value && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-0 top-0 h-10 w-8 p-0 hover:bg-destructive/10"
+                          onClick={() => {
+                            field.onChange(undefined);
+                            setManuallySetTime(false);
+                          }}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                     <FormMessage />
                   </FormItem>
                 )}

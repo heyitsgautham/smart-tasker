@@ -23,14 +23,14 @@ function AuthLoader() {
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-background">
       <div className="w-[350px] p-8">
-          <div className="flex flex-col items-center justify-center space-y-6">
-              <div className="flex items-center space-x-2">
-                <Logo className="h-8 w-8 text-primary" />
-                <span className="text-xl font-headline font-semibold">SmartTasker</span>
-              </div>
-              <Progress value={progress} className="w-full" />
+        <div className="flex flex-col items-center justify-center space-y-6">
+          <div className="flex items-center space-x-2">
+            <Logo className="h-8 w-8 text-primary" />
+            <span className="text-xl font-headline font-semibold">SmartTasker</span>
           </div>
+          <Progress value={progress} className="w-full" />
         </div>
+      </div>
     </div>
   );
 }
@@ -45,8 +45,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js')
-        .then(registration => console.log('Service Worker registered with scope:', registration.scope))
-        .catch(error => console.error('Service Worker registration failed:', error));
+        .then(registration => {
+          console.log('Service Worker registered successfully with scope:', registration.scope);
+        })
+        .catch(error => {
+          console.error('Service Worker registration failed:', error);
+          console.error('Make sure /public/sw.js exists in your project');
+        });
+    } else {
+      console.warn('Service Workers are not supported in this browser');
     }
   }, []);
 
@@ -77,7 +84,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, [user, loading, pathname, router]);
 
   if (loading) {
-     return <AuthLoader />;
+    return <AuthLoader />;
   }
 
   const isAuthRoute = AUTH_ROUTES.includes(pathname);
@@ -85,8 +92,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return <AuthLoader />;
   }
 
+  const getAuthHeader = async (): Promise<Record<string, string>> => {
+    if (!user) return {};
+    const token = await user.getIdToken();
+    return { Authorization: `Bearer ${token}` };
+  };
+
+  const getIdToken = async (): Promise<string | null> => {
+    if (!user) return null;
+    return await user.getIdToken();
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={{ user, loading, getAuthHeader, getIdToken }}>
       <FirebaseErrorListener />
       {children}
     </AuthContext.Provider>

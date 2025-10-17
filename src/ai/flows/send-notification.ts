@@ -8,17 +8,17 @@ import { z } from 'zod';
 import * as webpush from 'web-push';
 
 const PushSubscriptionSchema = z.object({
-    endpoint: z.string(),
-    expirationTime: z.number().nullable(),
-    keys: z.object({
-        p256dh: z.string(),
-        auth: z.string(),
-    }),
+  endpoint: z.string(),
+  expirationTime: z.number().nullable(),
+  keys: z.object({
+    p256dh: z.string(),
+    auth: z.string(),
+  }),
 });
 
 const NotificationPayloadSchema = z.object({
-    title: z.string(),
-    body: z.string(),
+  title: z.string(),
+  body: z.string(),
 });
 
 const SendNotificationInputSchema = z.object({
@@ -53,21 +53,36 @@ const sendNotificationFlow = ai.defineFlow(
       });
       throw new Error(errorMessage);
     }
-    
+
     try {
       webpush.setVapidDetails(
         vapidSubject,
         vapidPublicKey,
         vapidPrivateKey
       );
-      
-      await webpush.sendNotification(
+
+      console.log('Sending push notification with payload:', payload);
+
+      const result = await webpush.sendNotification(
         subscription,
         JSON.stringify(payload)
       );
-    } catch (error) {
+
+      console.log('Push notification sent successfully:', result);
+    } catch (error: any) {
       console.error("Error sending push notification inside flow:", error);
-      // Re-throw the error to be caught by the calling action
+
+      // Check if subscription has expired (410 status code)
+      if (error?.statusCode === 410) {
+        console.log("Push subscription has expired or been unsubscribed. Subscription should be removed from database.");
+        // Create a custom error to signal subscription cleanup
+        const expiredError = new Error('SUBSCRIPTION_EXPIRED');
+        (expiredError as any).statusCode = 410;
+        (expiredError as any).endpoint = subscription.endpoint;
+        throw expiredError;
+      }
+
+      // Re-throw other errors to be caught by the calling action
       throw error;
     }
   }

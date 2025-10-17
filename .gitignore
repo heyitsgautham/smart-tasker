@@ -45,3 +45,14 @@ firebase-debug.log
 firestore-debug.log
 .github
 .firebase
+
+# Environment files with secrets
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Google OAuth credentials (if accidentally saved as separate files)
+google-credentials.json
+oauth-credentials.json

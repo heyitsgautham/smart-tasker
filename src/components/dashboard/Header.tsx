@@ -24,31 +24,31 @@ export default function Header() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isSubscribed, setIsSubscribed] = useState(false);
-  
+
   useEffect(() => {
     if (!user) return;
     const checkSubscription = async () => {
       if ('serviceWorker' in navigator) {
         try {
-            const registration = await navigator.serviceWorker.ready;
-            const sub = await registration.pushManager.getSubscription();
-            if (sub) {
-                // Also check if subscription is stored in Firestore
-                const subRef = doc(db, `subscriptions/${user.uid}`);
-                const subDoc = await getDoc(subRef);
-                if (subDoc.exists()) {
-                    setIsSubscribed(true);
-                } else {
-                    // Mismatch, unsubscribe from push manager
-                    await sub.unsubscribe();
-                    setIsSubscribed(false);
-                }
+          const registration = await navigator.serviceWorker.ready;
+          const sub = await registration.pushManager.getSubscription();
+          if (sub) {
+            // Also check if subscription is stored in Firestore
+            const subRef = doc(db, `subscriptions/${user.uid}`);
+            const subDoc = await getDoc(subRef);
+            if (subDoc.exists()) {
+              setIsSubscribed(true);
             } else {
-                setIsSubscribed(false);
+              // Mismatch, unsubscribe from push manager
+              await sub.unsubscribe();
+              setIsSubscribed(false);
             }
-        } catch (error) {
-            console.error("Error checking subscription status:", error)
+          } else {
             setIsSubscribed(false);
+          }
+        } catch (error) {
+          console.error("Error checking subscription status:", error)
+          setIsSubscribed(false);
         }
       }
     };
@@ -68,34 +68,55 @@ export default function Header() {
 
     if (isSubscribed) {
       // Already subscribed, let's unsubscribe
-      const registration = await navigator.serviceWorker.ready;
-      const existingSubscription = await registration.pushManager.getSubscription();
-      
-      if (existingSubscription) {
-        await existingSubscription.unsubscribe();
-      }
-
-      if (user) {
-        const subRef = doc(db, `subscriptions/${user.uid}`);
-        deleteDoc(subRef).catch(async (serverError) => {
-            const permissionError = new FirestorePermissionError({
-                path: subRef.path,
-                operation: 'delete',
-            });
-            errorEmitter.emit('permission-error', permissionError);
-        });
-      }
-      setIsSubscribed(false);
-      toast({ title: 'Unsubscribed from notifications.' });
-    } else {
-      // Not subscribed, let's subscribe
-      const vapidKey = await getVapidKey();
-      if (!vapidKey) {
-        toast({ variant: 'destructive', title: 'VAPID key is not configured.' });
-        return;
-      }
       try {
         const registration = await navigator.serviceWorker.ready;
+        const existingSubscription = await registration.pushManager.getSubscription();
+
+        if (existingSubscription) {
+          await existingSubscription.unsubscribe();
+        }
+
+        if (user) {
+          const subRef = doc(db, `subscriptions/${user.uid}`);
+          await deleteDoc(subRef).catch(async (serverError) => {
+            const permissionError = new FirestorePermissionError({
+              path: subRef.path,
+              operation: 'delete',
+            });
+            errorEmitter.emit('permission-error', permissionError);
+          });
+        }
+        setIsSubscribed(false);
+        toast({ title: 'Unsubscribed from notifications.' });
+      } catch (error) {
+        console.error("Error unsubscribing:", error);
+        toast({ variant: 'destructive', title: 'Failed to unsubscribe from notifications.' });
+      }
+    } else {
+      // Not subscribed, let's subscribe
+      try {
+        // Request notification permission first
+        const permission = await Notification.requestPermission();
+
+        if (permission !== 'granted') {
+          toast({
+            variant: 'destructive',
+            title: 'Permission denied',
+            description: 'You need to grant notification permissions to subscribe.'
+          });
+          return;
+        }
+
+        const vapidKey = await getVapidKey();
+        if (!vapidKey) {
+          toast({ variant: 'destructive', title: 'VAPID key is not configured.' });
+          return;
+        }
+
+        // Wait for service worker to be ready
+        const registration = await navigator.serviceWorker.ready;
+        console.log('Service Worker is ready, subscribing to push...');
+
         const newSubscription = await registration.pushManager.subscribe({
           userVisibleOnly: true,
           applicationServerKey: vapidKey,
@@ -105,7 +126,7 @@ export default function Header() {
 
         if (user) {
           const subRef = doc(db, `subscriptions/${user.uid}`);
-          
+
           await setDoc(subRef, subscriptionData)
             .catch(async (serverError) => {
               await newSubscription.unsubscribe(); // Rollback subscription on DB error
@@ -118,7 +139,7 @@ export default function Header() {
               throw serverError; // Prevent success toast
             });
         }
-        
+
         setIsSubscribed(true);
         toast({ title: 'Subscribed to notifications!' });
 
@@ -127,7 +148,7 @@ export default function Header() {
         if ((error as any).name === 'NotAllowedError') {
           toast({ variant: 'destructive', title: 'Subscription failed', description: 'You denied the notification permission request.' });
         } else {
-          toast({ variant: 'destructive', title: 'Subscription failed', description: 'An unexpected error occurred.' });
+          toast({ variant: 'destructive', title: 'Subscription failed', description: 'An unexpected error occurred. Check console for details.' });
         }
       }
     }
