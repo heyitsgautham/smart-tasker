@@ -23,7 +23,7 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
+import { SmartTextarea } from "@/components/ui/smart-textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn, formatDate } from "@/lib/utils";
 import { db } from "@/lib/firebase";
@@ -197,9 +197,18 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description</FormLabel>
+                  <FormLabel>Description (try typing dates like "tomorrow at 3pm")</FormLabel>
                   <FormControl>
-                    <Textarea placeholder="Add more details about your task..." className="resize-none" {...field} />
+                    <SmartTextarea
+                      placeholder="Add more details about your task..."
+                      {...field}
+                      onDateDetected={(date) => {
+                        if (date) {
+                          form.setValue("dueDate", date);
+                          form.setValue("dueTime", format(date, 'HH:mm'));
+                        }
+                      }}
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -300,8 +309,8 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
                 </FormItem>
               )}
             />
-            <Button type="button" variant="outline" size="sm" className="w-full gap-2" onClick={handleSuggestPriority} disabled={isSuggesting}>
-              {isSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-accent" />}
+            <Button type="button" variant="outline" size="sm" className="w-full gap-2 hover:bg-orange-500 hover:text-white hover:border-orange-500 transition-colors group" onClick={handleSuggestPriority} disabled={isSuggesting}>
+              {isSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-orange-500 group-hover:text-white transition-colors" />}
               Suggest Priority with AI
             </Button>
             <DialogFooter>

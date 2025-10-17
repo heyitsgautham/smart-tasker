@@ -97,7 +97,7 @@ export default function TaskCard({ task, onUpdate, onDelete, onEdit }: TaskCardP
     <Card
       className={cn(
         "flex flex-col transition-all duration-300 hover:shadow-lg hover:-translate-y-1 h-full",
-        task.completed && "bg-card/50"
+        task.completed && "bg-orange-100 border-2 border-orange-400 shadow-orange-200 shadow-md"
       )}
     >
       <CardHeader className="flex flex-row items-start gap-4 space-y-0 pb-4">

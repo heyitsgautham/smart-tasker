@@ -11,6 +11,8 @@ import EditTaskDialog from '@/components/dashboard/EditTaskDialog';
 import type { Task, TaskPriority } from '@/lib/types';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from '@/components/ui/separator';
+import { Button } from '@/components/ui/button';
+import { LayoutGrid, List } from 'lucide-react';
 import DeleteConfirmationDialog from '@/components/dashboard/DeleteConfirmationDialog';
 import { scheduleTaskNotification } from './actions';
 import { useToast } from '@/hooks/use-toast';
@@ -18,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 type StatusFilter = "all" | "pending" | "completed";
 type PriorityFilter = "all" | TaskPriority;
 type SortOption = "createdAt" | "dueDate" | "priority";
+type ViewMode = "grid" | "list";
 
 export default function Home() {
   const { user } = useAuth();
@@ -28,6 +31,7 @@ export default function Home() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [sortOption, setSortOption] = useState<SortOption>("createdAt");
+  const [viewMode, setViewMode] = useState<ViewMode>("grid");
 
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [deletingTask, setDeletingTask] = useState<Task | null>(null);
@@ -171,65 +175,88 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <Header />
-      <main className="flex-1 p-4 sm:p-6 lg:p-8 container mx-auto">
-        <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
-          <div className="flex items-baseline gap-4">
-            <h1 className="text-2xl md:text-3xl font-headline font-bold tracking-tight">
-              My Tasks
-            </h1>
-            {!loading && tasks.length > 0 && (
-              <span className="bg-primary/20 text-primary-foreground font-bold px-3 py-1 rounded-full text-sm">
-                {incompleteTasks > 0 ? `${incompleteTasks} remaining` : 'All done!'}
-              </span>
-            )}
-          </div>
-          <AddTaskDialog />
-        </div>
-
-        <div className="flex items-center gap-4 mb-8 flex-wrap">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground">Status:</span>
-            <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Filter status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="pending">Pending</SelectItem>
-                <SelectItem value="completed">Completed</SelectItem>
-              </SelectContent>
-            </Select>
+      <main className="flex-1 p-4 sm:p-6 lg:p-8">
+        <div className="container mx-auto max-w-5xl">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
+            <div className="flex items-baseline gap-4">
+              <h1 className="text-2xl md:text-3xl font-headline font-bold tracking-tight">
+                My Tasks
+              </h1>
+              {!loading && tasks.length > 0 && (
+                <span className="bg-primary/20 text-primary-foreground font-bold px-3 py-1 rounded-full text-sm">
+                  {incompleteTasks > 0 ? `${incompleteTasks} remaining` : 'All done!'}
+                </span>
+              )}
+            </div>
+            <AddTaskDialog />
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground">Priority:</span>
-            <Select value={priorityFilter} onValueChange={(value) => setPriorityFilter(value as PriorityFilter)}>
-              <SelectTrigger className="w-[120px]">
-                <SelectValue placeholder="Filter priority" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All</SelectItem>
-                <SelectItem value="high">High</SelectItem>
-                <SelectItem value="medium">Medium</SelectItem>
-                <SelectItem value="low">Low</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="flex items-center justify-between gap-4 mb-8 flex-wrap">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Status:</span>
+              <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as StatusFilter)}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Filter status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="pending">Pending</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Priority:</span>
+              <Select value={priorityFilter} onValueChange={(value) => setPriorityFilter(value as PriorityFilter)}>
+                <SelectTrigger className="w-[120px]">
+                  <SelectValue placeholder="Filter priority" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All</SelectItem>
+                  <SelectItem value="high">High</SelectItem>
+                  <SelectItem value="medium">Medium</SelectItem>
+                  <SelectItem value="low">Low</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Separator orientation="vertical" className="h-6" />
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium text-muted-foreground">Sort by:</span>
+              <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
+                <SelectTrigger className="w-[150px]">
+                  <SelectValue placeholder="Sort by" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="priority">Priority</SelectItem>
+                  <SelectItem value="createdAt">Created Date</SelectItem>
+                  <SelectItem value="dueDate">Due Date</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
-          <Separator orientation="vertical" className="h-6" />
-
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground">Sort by:</span>
-            <Select value={sortOption} onValueChange={(value) => setSortOption(value as SortOption)}>
-              <SelectTrigger className="w-[150px]">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="priority">Priority</SelectItem>
-                <SelectItem value="createdAt">Created Date</SelectItem>
-                <SelectItem value="dueDate">Due Date</SelectItem>
-              </SelectContent>
-            </Select>
+          {/* View Switcher */}
+          <div className="flex items-center gap-1 border rounded-lg p-1">
+            <Button
+              variant={viewMode === "grid" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setViewMode("grid")}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </Button>
+            <Button
+              variant={viewMode === "list" ? "secondary" : "ghost"}
+              size="sm"
+              className="h-8 w-8 p-0"
+              onClick={() => setViewMode("list")}
+            >
+              <List className="h-4 w-4" />
+            </Button>
           </div>
         </div>
 
@@ -239,6 +266,7 @@ export default function Home() {
           onTaskUpdate={handleTaskUpdate}
           onTaskDelete={handleDeleteRequest}
           onTaskEdit={handleEdit}
+          viewMode={viewMode}
         />
 
         {editingTask && (
@@ -256,6 +284,7 @@ export default function Home() {
             taskName={deletingTask.title}
           />
         )}
+        </div>
       </main>
     </div>
   );

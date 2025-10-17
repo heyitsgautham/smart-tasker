@@ -2,6 +2,7 @@
 
 import { Task } from "@/lib/types";
 import TaskCard from "./TaskCard";
+import TaskListView from "./TaskListView";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { ListTodo } from "lucide-react";
@@ -13,20 +14,23 @@ interface TaskListProps {
   onTaskUpdate: (id: string, updates: Partial<Task>) => void;
   onTaskDelete: (task: Task) => void;
   onTaskEdit: (task: Task) => void;
+  viewMode?: "grid" | "list";
 }
 
-export default function TaskList({ tasks, loading, onTaskUpdate, onTaskDelete, onTaskEdit }: TaskListProps) {
+export default function TaskList({ tasks, loading, onTaskUpdate, onTaskDelete, onTaskEdit, viewMode = "grid" }: TaskListProps) {
 
   if (loading) {
     return (
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className={viewMode === "grid" ? "grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4" : "space-y-2"}>
         {[...Array(6)].map((_, i) => (
           <div key={i} className="flex flex-col space-y-3">
-            <Skeleton className="h-[150px] w-full rounded-xl" />
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-2/3" />
-            </div>
+            <Skeleton className={viewMode === "grid" ? "h-[150px] w-full rounded-xl" : "h-[60px] w-full rounded-lg"} />
+            {viewMode === "grid" && (
+              <div className="space-y-2">
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-2/3" />
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -44,6 +48,17 @@ export default function TaskList({ tasks, loading, onTaskUpdate, onTaskDelete, o
           </AlertDescription>
         </Alert>
       </div>
+    );
+  }
+
+  if (viewMode === "list") {
+    return (
+      <TaskListView
+        tasks={tasks}
+        onTaskUpdate={onTaskUpdate}
+        onTaskDelete={onTaskDelete}
+        onTaskEdit={onTaskEdit}
+      />
     );
   }
 
