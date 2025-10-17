@@ -120,141 +120,143 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
     });
 
     return (
-        <div className="space-y-6">
-            {sortedGroups.map((groupKey) => {
-                const groupTasks = groupedTasks[groupKey];
-                const completedCount = groupTasks.filter(t => t.completed).length;
-                const totalCount = groupTasks.length;
+        <div className="max-w-5xl mx-auto">
+            <div className="space-y-6">
+                {sortedGroups.map((groupKey) => {
+                    const groupTasks = groupedTasks[groupKey];
+                    const completedCount = groupTasks.filter(t => t.completed).length;
+                    const totalCount = groupTasks.length;
 
-                return (
-                    <div key={groupKey} className="space-y-2">
-                        {/* Group Header */}
-                        <div className="flex items-center justify-between py-2">
-                            <h2 className="font-semibold text-sm flex items-center gap-2">
+                    return (
+                        <div key={groupKey} className="space-y-2">
+                            {/* Group Header */}
+                            <div className="flex items-center justify-between py-2">
+                                <h2 className="font-semibold text-sm flex items-center gap-2">
+                                    {groupKey === "Overdue" && (
+                                        <span className="text-red-600">{groupKey}</span>
+                                    )}
+                                    {groupKey !== "Overdue" && groupKey}
+                                    <span className="text-xs text-muted-foreground font-normal">
+                                        {completedCount}/{totalCount}
+                                    </span>
+                                </h2>
                                 {groupKey === "Overdue" && (
-                                    <span className="text-red-600">{groupKey}</span>
+                                    <RescheduleDialog
+                                        trigger={
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                onClick={() => {
+                                                    setRescheduleGroup(groupTasks.filter(t => !t.completed));
+                                                    setIsRescheduleOpen(true);
+                                                }}
+                                            >
+                                                Reschedule
+                                            </Button>
+                                        }
+                                        tasks={rescheduleGroup || []}
+                                        isOpen={isRescheduleOpen}
+                                        onOpenChange={setIsRescheduleOpen}
+                                        onReschedule={handleReschedule}
+                                    />
                                 )}
-                                {groupKey !== "Overdue" && groupKey}
-                                <span className="text-xs text-muted-foreground font-normal">
-                                    {completedCount}/{totalCount}
-                                </span>
-                            </h2>
-                            {groupKey === "Overdue" && (
-                                <RescheduleDialog
-                                    trigger={
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                                            onClick={() => {
-                                                setRescheduleGroup(groupTasks.filter(t => !t.completed));
-                                                setIsRescheduleOpen(true);
-                                            }}
+                            </div>
+
+                            {/* Tasks */}
+                            <div className="space-y-1">
+                                {groupTasks.map((task) => {
+                                    const dueDateInfo = formatDueDate(task);
+
+                                    return (
+                                        <div
+                                            key={task.id}
+                                            className={cn(
+                                                "group flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors",
+                                                task.completed && "bg-orange-50/50",
+                                                priorityStyles[task.priority]
+                                            )}
                                         >
-                                            Reschedule
-                                        </Button>
-                                    }
-                                    tasks={rescheduleGroup || []}
-                                    isOpen={isRescheduleOpen}
-                                    onOpenChange={setIsRescheduleOpen}
-                                    onReschedule={handleReschedule}
-                                />
-                            )}
-                        </div>
+                                            {/* Checkbox */}
+                                            <Checkbox
+                                                checked={task.completed}
+                                                onCheckedChange={() => handleToggleComplete(task)}
+                                                className="flex-shrink-0"
+                                            />
 
-                        {/* Tasks */}
-                        <div className="space-y-1">
-                            {groupTasks.map((task) => {
-                                const dueDateInfo = formatDueDate(task);
-
-                                return (
-                                    <div
-                                        key={task.id}
-                                        className={cn(
-                                            "group flex items-center gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors",
-                                            task.completed && "bg-orange-50/50",
-                                            priorityStyles[task.priority]
-                                        )}
-                                    >
-                                        {/* Checkbox */}
-                                        <Checkbox
-                                            checked={task.completed}
-                                            onCheckedChange={() => handleToggleComplete(task)}
-                                            className="flex-shrink-0"
-                                        />
-
-                                        {/* Task Content */}
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                <span
-                                                    className={cn(
-                                                        "font-medium text-sm",
-                                                        task.completed && "line-through text-muted-foreground"
-                                                    )}
-                                                >
-                                                    {task.title}
-                                                </span>
-                                                {task.priority !== "low" && (
-                                                    <span className={cn("text-xs", priorityColors[task.priority])}>
-                                                        •
+                                            {/* Task Content */}
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span
+                                                        className={cn(
+                                                            "font-medium text-sm",
+                                                            task.completed && "line-through text-muted-foreground"
+                                                        )}
+                                                    >
+                                                        {task.title}
                                                     </span>
+                                                    {task.priority !== "low" && (
+                                                        <span className={cn("text-xs", priorityColors[task.priority])}>
+                                                            •
+                                                        </span>
+                                                    )}
+                                                </div>
+                                                {task.description && (
+                                                    <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
+                                                        {task.description}
+                                                    </p>
                                                 )}
                                             </div>
-                                            {task.description && (
-                                                <p className="text-xs text-muted-foreground mt-1 line-clamp-1">
-                                                    {task.description}
-                                                </p>
+
+                                            {/* Due Date */}
+                                            {dueDateInfo && (
+                                                <div className="flex-shrink-0 hidden sm:flex items-center gap-1">
+                                                    <CalendarIcon className="h-3 w-3 text-muted-foreground" />
+                                                    <span
+                                                        className={cn(
+                                                            "text-xs",
+                                                            dueDateInfo.isPastDue ? "text-red-600" : "text-muted-foreground"
+                                                        )}
+                                                    >
+                                                        {dueDateInfo.text}
+                                                    </span>
+                                                </div>
                                             )}
+
+                                            {/* Actions */}
+                                            <DropdownMenu>
+                                                <DropdownMenuTrigger asChild>
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="icon"
+                                                        className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
+                                                    >
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                    </Button>
+                                                </DropdownMenuTrigger>
+                                                <DropdownMenuContent align="end">
+                                                    <DropdownMenuItem onClick={() => onTaskEdit(task)}>
+                                                        <Pencil className="mr-2 h-4 w-4" />
+                                                        Edit
+                                                    </DropdownMenuItem>
+                                                    <DropdownMenuSeparator />
+                                                    <DropdownMenuItem
+                                                        onClick={() => onTaskDelete(task)}
+                                                        className="text-destructive"
+                                                    >
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        Delete
+                                                    </DropdownMenuItem>
+                                                </DropdownMenuContent>
+                                            </DropdownMenu>
                                         </div>
-
-                                        {/* Due Date */}
-                                        {dueDateInfo && (
-                                            <div className="flex-shrink-0 hidden sm:flex items-center gap-1">
-                                                <CalendarIcon className="h-3 w-3 text-muted-foreground" />
-                                                <span
-                                                    className={cn(
-                                                        "text-xs",
-                                                        dueDateInfo.isPastDue ? "text-red-600" : "text-muted-foreground"
-                                                    )}
-                                                >
-                                                    {dueDateInfo.text}
-                                                </span>
-                                            </div>
-                                        )}
-
-                                        {/* Actions */}
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger asChild>
-                                                <Button
-                                                    variant="ghost"
-                                                    size="icon"
-                                                    className="h-8 w-8 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0"
-                                                >
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem onClick={() => onTaskEdit(task)}>
-                                                    <Pencil className="mr-2 h-4 w-4" />
-                                                    Edit
-                                                </DropdownMenuItem>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem
-                                                    onClick={() => onTaskDelete(task)}
-                                                    className="text-destructive"
-                                                >
-                                                    <Trash2 className="mr-2 h-4 w-4" />
-                                                    Delete
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
+                            </div>
                         </div>
-                    </div>
-                );
-            })}
+                    );
+                })}
+            </div>
         </div>
     );
 }
