@@ -50,9 +50,10 @@ interface EditTaskDialogProps {
   task: Task;
   isOpen: boolean;
   onClose: () => void;
+  onUpdate?: (id: string, updates: Partial<Task>) => Promise<void>;
 }
 
-export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialogProps) {
+export default function EditTaskDialog({ task, isOpen, onClose, onUpdate }: EditTaskDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [autoDetectedDate, setAutoDetectedDate] = useState(false);
@@ -203,60 +204,14 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
 
       const taskDoc = doc(db, "tasks", task.id);
 
-      // Handle calendar event synchronization
-      const hadCalendarEvent = Boolean(task.calendarEventId);
-      const willHaveDate = Boolean(dueDateTimestamp);
-      const hadDate = Boolean(task.dueDate);
-
-      if (willHaveDate) {
-        // Task has/will have a due date
-        const serializableTask = {
-          id: task.id,
-          userId: task.userId,
-          title: values.title,
-          description: values.description || "",
-          priority: values.priority,
-          reminder: values.reminder as ReminderOption,
-          dueDate: dueDateTimestamp!.toDate().toISOString(),
-          hasTime: hasExplicitTime,
-          completed: task.completed,
-          createdAt: task.createdAt.toDate().toISOString(),
-          notificationSent: false,
-          calendarEventId: task.calendarEventId,
-        };
-
-        if (hadCalendarEvent) {
-          // Update existing calendar event
-          const result = await updateCalendarEventAction(serializableTask, user.uid);
-          if (result?.error) {
-            console.error("Failed to update calendar event:", result.error);
-            toast({
-              variant: "destructive",
-              title: "Calendar sync failed",
-              description: "Task updated but calendar event sync failed.",
-            });
-          }
-        } else {
-          // Create new calendar event
-          const result = await addCalendarEventAction(serializableTask, user.uid);
-          if (result?.success && result.eventId) {
-            updatedTaskData.calendarEventId = result.eventId;
-          } else if (result?.error) {
-            console.error("Failed to add calendar event:", result.error);
-          }
-        }
-      } else if (hadCalendarEvent) {
-        // Date was removed - delete the calendar event
-        const result = await deleteCalendarEventAction(task.calendarEventId!, user.uid);
-        if (result?.success) {
-          (updatedTaskData as any).calendarEventId = null;
-        } else if (result?.error) {
-          console.error("Failed to delete calendar event:", result.error);
-        }
+      // Use optimistic update if handler provided, otherwise update Firestore directly
+      if (onUpdate) {
+        // Optimistic update - instant UI feedback
+        await onUpdate(task.id, updatedTaskData);
+      } else {
+        // Fallback to direct Firestore update
+        await updateDoc(taskDoc, updatedTaskData as any);
       }
-
-      // Update task in Firestore
-      await updateDoc(taskDoc, updatedTaskData as any);
 
       toast({
         title: "Task Updated",
@@ -264,6 +219,60 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
       });
 
       onClose();
+
+      // Handle calendar event synchronization in background
+      const hadCalendarEvent = Boolean(task.calendarEventId);
+      const willHaveDate = Boolean(dueDateTimestamp);
+
+      // Background calendar sync (non-blocking)
+      (async () => {
+        try {
+          if (willHaveDate) {
+            // Task has/will have a due date
+            const serializableTask = {
+              id: task.id,
+              userId: task.userId,
+              title: values.title,
+              description: values.description || "",
+              priority: values.priority,
+              reminder: values.reminder as ReminderOption,
+              dueDate: dueDateTimestamp!.toDate().toISOString(),
+              hasTime: hasExplicitTime,
+              completed: task.completed,
+              createdAt: task.createdAt.toDate().toISOString(),
+              notificationSent: false,
+              calendarEventId: task.calendarEventId,
+            };
+
+            if (hadCalendarEvent) {
+              // Update existing calendar event
+              const result = await updateCalendarEventAction(serializableTask, user.uid);
+              if (result?.error) {
+                console.error("Failed to update calendar event:", result.error);
+              }
+            } else {
+              // Create new calendar event
+              const result = await addCalendarEventAction(serializableTask, user.uid);
+              if (result?.success && result.eventId) {
+                // Update with calendar event ID
+                await updateDoc(taskDoc, { calendarEventId: result.eventId });
+              } else if (result?.error) {
+                console.error("Failed to add calendar event:", result.error);
+              }
+            }
+          } else if (hadCalendarEvent) {
+            // Date was removed - delete the calendar event
+            const result = await deleteCalendarEventAction(task.calendarEventId!, user.uid);
+            if (result?.success) {
+              await updateDoc(taskDoc, { calendarEventId: null });
+            } else if (result?.error) {
+              console.error("Failed to delete calendar event:", result.error);
+            }
+          }
+        } catch (error) {
+          console.error("Background calendar sync failed:", error);
+        }
+      })();
     } catch (error) {
       console.error("Failed to update task:", error);
       toast({

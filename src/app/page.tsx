@@ -229,32 +229,65 @@ export default function Home() {
   }, [tasks, statusFilter, priorityFilter, sortOption]);
 
   const handleTaskUpdate = async (id: string, updates: Partial<Task>) => {
-    const taskDoc = doc(db, "tasks", id);
-    await updateDoc(taskDoc, updates);
+    // Optimistic UI update: Update state immediately
+    setTasks(prevTasks => 
+      prevTasks.map(task => 
+        task.id === id ? { ...task, ...updates } : task
+      )
+    );
+
+    // Background operation: Update Firestore
+    try {
+      const taskDoc = doc(db, "tasks", id);
+      await updateDoc(taskDoc, updates);
+    } catch (error) {
+      console.error("Failed to update task:", error);
+      // Revert on error - Firestore snapshot listener will restore correct state
+      toast({
+        variant: "destructive",
+        title: "Update Failed",
+        description: "Failed to update task. Please try again.",
+      });
+    }
   };
 
   const confirmTaskDelete = async () => {
     if (!deletingTask || !user) return;
 
-    // Delete calendar event if it exists
-    if (deletingTask.calendarEventId) {
-      try {
-        await deleteCalendarEventAction(deletingTask.calendarEventId, user.uid);
-      } catch (error) {
-        console.error("Failed to delete calendar event:", error);
-        // Continue with task deletion even if calendar deletion fails
-      }
-    }
+    const taskToDelete = deletingTask;
+    
+    // Optimistic UI update: Remove from state immediately
+    setTasks(prevTasks => prevTasks.filter(t => t.id !== taskToDelete.id));
+    setDeletingTask(null);
 
-    // Delete task from Firestore
-    const taskDoc = doc(db, "tasks", deletingTask.id);
-    await deleteDoc(taskDoc);
-
+    // Show immediate feedback
     toast({
       title: "Task Deleted",
-      description: `"${deletingTask.title}" has been successfully deleted.`,
+      description: `"${taskToDelete.title}" has been successfully deleted.`,
     });
-    setDeletingTask(null);
+
+    // Background operations: Delete from Firestore and calendar
+    try {
+      // Delete task from Firestore
+      const taskDoc = doc(db, "tasks", taskToDelete.id);
+      await deleteDoc(taskDoc);
+
+      // Delete calendar event if it exists (in background)
+      if (taskToDelete.calendarEventId) {
+        deleteCalendarEventAction(taskToDelete.calendarEventId, user.uid).catch(error => {
+          console.error("Failed to delete calendar event:", error);
+        });
+      }
+    } catch (error) {
+      console.error("Failed to delete task:", error);
+      // Revert optimistic update on error
+      setTasks(prevTasks => [...prevTasks, taskToDelete]);
+      toast({
+        variant: "destructive",
+        title: "Deletion Failed",
+        description: "Failed to delete task. Please try again.",
+      });
+    }
   };
 
   const handleEdit = (task: Task) => {
@@ -369,6 +402,7 @@ export default function Home() {
               task={editingTask}
               isOpen={!!editingTask}
               onClose={() => setEditingTask(null)}
+              onUpdate={handleTaskUpdate}
             />
           )}
           {deletingTask && (

@@ -167,25 +167,6 @@ export default function AddTaskDialog() {
 
       const docRef = await addDoc(collection(db, "tasks"), newTask);
 
-      // Add to calendar if has due date
-      if (dueDateTimestamp) {
-        const serializableTask = {
-          id: docRef.id,
-          ...newTask,
-          dueDate: dueDateTimestamp.toDate().toISOString(),
-          createdAt: newTask.createdAt.toDate().toISOString(),
-        };
-
-        const result = await addCalendarEventAction(serializableTask, user.uid);
-        if (result?.success && result.eventId) {
-          // Store calendar event ID
-          await updateDoc(docRef, { calendarEventId: result.eventId });
-        } else if (result?.error) {
-          console.error("Failed to add to Google Calendar:", result.error);
-          // Don't show error to user - task is still created
-        }
-      }
-
       toast({
         title: "Task Added",
         description: `"${values.title}" has been added to your list.`,
@@ -194,6 +175,30 @@ export default function AddTaskDialog() {
       form.reset();
       setAutoDetectedDate(false);
       setOpen(false);
+
+      // Add to calendar in background if has due date
+      if (dueDateTimestamp) {
+        (async () => {
+          try {
+            const serializableTask = {
+              id: docRef.id,
+              ...newTask,
+              dueDate: dueDateTimestamp.toDate().toISOString(),
+              createdAt: newTask.createdAt.toDate().toISOString(),
+            };
+
+            const result = await addCalendarEventAction(serializableTask, user.uid);
+            if (result?.success && result.eventId) {
+              // Store calendar event ID
+              await updateDoc(docRef, { calendarEventId: result.eventId });
+            } else if (result?.error) {
+              console.error("Failed to add to Google Calendar:", result.error);
+            }
+          } catch (error) {
+            console.error("Background calendar sync failed:", error);
+          }
+        })();
+      }
     } catch (error) {
       console.error("Failed to add task:", error);
       toast({
