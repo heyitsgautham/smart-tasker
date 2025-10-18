@@ -26,13 +26,14 @@ interface RescheduleDialogProps {
     tasks: Task[];
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    onReschedule: (taskIds: string[], newDate: Date | null) => void;
+    onReschedule: (taskIds: string[], newDate: Date | null, hasTime?: boolean) => void;
 }
 
 export default function RescheduleDialog({ trigger, tasks, isOpen, onOpenChange, onReschedule }: RescheduleDialogProps) {
     const [selectedDate, setSelectedDate] = useState<Date | undefined>(undefined);
     const [customDateInput, setCustomDateInput] = useState("");
-    const [selectedTime, setSelectedTime] = useState<string>("09:00");
+    const [selectedTime, setSelectedTime] = useState<string>("");
+    const [includeTime, setIncludeTime] = useState<boolean>(false);
 
     const today = new Date();
     const tomorrow = addDays(today, 1);
@@ -80,16 +81,20 @@ export default function RescheduleDialog({ trigger, tasks, isOpen, onOpenChange,
     const applyTimeToDate = (date: Date | null): Date | null => {
         if (!date) return null;
 
-        const [hours, minutes] = selectedTime.split(':').map(Number);
-        const newDate = new Date(date);
-        newDate.setHours(hours, minutes, 0, 0);
-        return newDate;
+        if (includeTime && selectedTime) {
+            const [hours, minutes] = selectedTime.split(':').map(Number);
+            const newDate = new Date(date);
+            newDate.setHours(hours, minutes, 0, 0);
+            return newDate;
+        }
+
+        return date;
     };
 
     const handleQuickSelect = (date: Date | null) => {
         const taskIds = tasks.map(t => t.id);
         const dateWithTime = applyTimeToDate(date);
-        onReschedule(taskIds, dateWithTime);
+        onReschedule(taskIds, dateWithTime, includeTime && !!selectedTime);
         onOpenChange(false);
     };
 
@@ -98,7 +103,7 @@ export default function RescheduleDialog({ trigger, tasks, isOpen, onOpenChange,
             setSelectedDate(date);
             const taskIds = tasks.map(t => t.id);
             const dateWithTime = applyTimeToDate(date);
-            onReschedule(taskIds, dateWithTime);
+            onReschedule(taskIds, dateWithTime, includeTime && !!selectedTime);
             onOpenChange(false);
         }
     };
@@ -159,16 +164,27 @@ export default function RescheduleDialog({ trigger, tasks, isOpen, onOpenChange,
                     <div className="flex items-center gap-3 pt-2 px-1">
                         <Clock className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                         <div className="flex-1">
-                            <label htmlFor="time-input" className="text-xs text-muted-foreground block mb-1">
-                                Time
-                            </label>
-                            <Input
-                                id="time-input"
-                                type="time"
-                                value={selectedTime}
-                                onChange={(e) => setSelectedTime(e.target.value)}
-                                className="h-8 text-sm"
-                            />
+                            <div className="flex items-center gap-2 mb-1">
+                                <input
+                                    type="checkbox"
+                                    id="include-time"
+                                    checked={includeTime}
+                                    onChange={(e) => setIncludeTime(e.target.checked)}
+                                    className="h-3 w-3"
+                                />
+                                <label htmlFor="include-time" className="text-xs text-muted-foreground cursor-pointer">
+                                    Include time
+                                </label>
+                            </div>
+                            {includeTime && (
+                                <Input
+                                    id="time-input"
+                                    type="time"
+                                    value={selectedTime}
+                                    onChange={(e) => setSelectedTime(e.target.value)}
+                                    className="h-8 text-sm"
+                                />
+                            )}
                         </div>
                     </div>
                 </div>

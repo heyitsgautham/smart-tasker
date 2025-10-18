@@ -14,7 +14,7 @@ import { Separator } from '@/components/ui/separator';
 import { Button } from '@/components/ui/button';
 import { LayoutGrid, List } from 'lucide-react';
 import DeleteConfirmationDialog from '@/components/dashboard/DeleteConfirmationDialog';
-import { scheduleTaskNotification } from './actions';
+import { scheduleTaskNotification, deleteCalendarEventAction } from './actions';
 import { useToast } from '@/hooks/use-toast';
 
 type StatusFilter = "all" | "pending" | "completed";
@@ -115,12 +115,12 @@ export default function Home() {
 
         // Calculate how much time until the reminder
         const timeUntilReminder = reminderTime.getTime() - now.getTime();
-        
+
         // Send notification if we're within 30 seconds before the reminder time
         // This gives us a buffer to send early, but not too early
         // The notification will arrive right at or slightly before the scheduled time
         const shouldSend = timeUntilReminder <= 30000 && timeUntilReminder >= -5000; // -5s to +30s window
-        
+
         // Mark as missed if we're more than 5 minutes past
         const isMissed = timeUntilReminder < -5 * 60 * 1000;
 
@@ -164,16 +164,16 @@ export default function Home() {
       const now = new Date();
       const seconds = now.getSeconds();
       const milliseconds = now.getMilliseconds();
-      
+
       // Calculate milliseconds until the next minute starts
       const msUntilNextMinute = (60 - seconds) * 1000 - milliseconds;
-      
+
       console.log(`⏲️  Next reminder check in ${(msUntilNextMinute / 1000).toFixed(1)}s (at ${new Date(now.getTime() + msUntilNextMinute).toLocaleTimeString()})`);
-      
+
       // Schedule check at the start of the next minute
       timeoutId = setTimeout(() => {
         checkReminders();
-        
+
         // After first aligned check, set up interval for every minute
         intervalId = setInterval(checkReminders, 60000);
       }, msUntilNextMinute);
@@ -181,7 +181,7 @@ export default function Home() {
 
     // Check immediately on mount (might catch tasks due right now)
     checkReminders();
-    
+
     // Schedule aligned checks
     scheduleNextCheck();
 
@@ -234,9 +234,22 @@ export default function Home() {
   };
 
   const confirmTaskDelete = async () => {
-    if (!deletingTask) return;
+    if (!deletingTask || !user) return;
+
+    // Delete calendar event if it exists
+    if (deletingTask.calendarEventId) {
+      try {
+        await deleteCalendarEventAction(deletingTask.calendarEventId, user.uid);
+      } catch (error) {
+        console.error("Failed to delete calendar event:", error);
+        // Continue with task deletion even if calendar deletion fails
+      }
+    }
+
+    // Delete task from Firestore
     const taskDoc = doc(db, "tasks", deletingTask.id);
     await deleteDoc(taskDoc);
+
     toast({
       title: "Task Deleted",
       description: `"${deletingTask.title}" has been successfully deleted.`,

@@ -61,7 +61,7 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
         return format(date, "MMM d");
     };
 
-    const handleReschedule = (taskIds: string[], newDate: Date | null) => {
+    const handleReschedule = (taskIds: string[], newDate: Date | null, hasTime?: boolean) => {
         // Store previous dates for undo
         const previousDates: Record<string, Timestamp | null> = {};
         taskIds.forEach(id => {
@@ -75,6 +75,7 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
         taskIds.forEach(id => {
             onTaskUpdate(id, {
                 dueDate: newDate ? Timestamp.fromDate(newDate) : null,
+                hasTime: hasTime || false,
                 notificationSent: false, // Reset notification status
             });
         });
@@ -287,13 +288,19 @@ export default function TaskListView({ tasks, onTaskUpdate, onTaskDelete, onTask
                                                     </Button>
                                                 </DropdownMenuTrigger>
                                                 <DropdownMenuContent align="end">
-                                                    <DropdownMenuItem onClick={() => onTaskEdit(task)}>
+                                                    <DropdownMenuItem onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        onTaskEdit(task);
+                                                    }}>
                                                         <Pencil className="mr-2 h-4 w-4" />
                                                         Edit
                                                     </DropdownMenuItem>
                                                     <DropdownMenuSeparator />
                                                     <DropdownMenuItem
-                                                        onClick={() => onTaskDelete(task)}
+                                                        onClick={(e) => {
+                                                            e.stopPropagation();
+                                                            onTaskDelete(task);
+                                                        }}
                                                         className="text-destructive"
                                                     >
                                                         <Trash2 className="mr-2 h-4 w-4" />

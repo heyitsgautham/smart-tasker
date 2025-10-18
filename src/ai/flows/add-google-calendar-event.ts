@@ -15,6 +15,7 @@ const AddGoogleCalendarEventInputSchema = z.object({
     description: z.string(),
     dueDate: z.string(), // ISO string
     priority: z.enum(["low", "medium", "high"]),
+    hasTime: z.boolean().optional(), // Whether the task has a specific time
   }),
 });
 export type AddGoogleCalendarEventInput = z.infer<typeof AddGoogleCalendarEventInputSchema>;
@@ -91,19 +92,39 @@ const addGoogleCalendarEventFlow = ai.defineFlow(
       high: '11', // tomato (red)
     };
 
-    const event = {
+    // Create event object based on whether it has a specific time or is all-day
+    const hasTime = task.hasTime ?? true; // Default to true for backward compatibility
+    const event: any = {
       summary: task.title,
       description: task.description,
-      start: {
-        dateTime: task.dueDate,
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      },
-      end: {
-        dateTime: task.dueDate, // For tasks, start and end can be the same
-        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-      },
       colorId: colorIdMap[task.priority],
     };
+
+    if (hasTime) {
+      // Event with specific time
+      event.start = {
+        dateTime: task.dueDate,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      };
+      event.end = {
+        dateTime: task.dueDate,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      };
+    } else {
+      // All-day event (date only, no time)
+      // Extract date in local timezone to avoid UTC conversion issues
+      const date = new Date(task.dueDate);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateString = `${year}-${month}-${day}`; // YYYY-MM-DD format
+      event.start = {
+        date: dateString,
+      };
+      event.end = {
+        date: dateString,
+      };
+    }
 
     try {
       const response = await calendar.events.insert({

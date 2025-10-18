@@ -141,12 +141,18 @@ export default function TaskCard({ task, onUpdate, onDelete, onEdit }: TaskCardP
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => onEdit(task)}>
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onEdit(task);
+            }}>
               <Pencil className="mr-2 h-4 w-4" />
               Edit
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem onClick={() => onDelete(task)} className="text-destructive">
+            <DropdownMenuItem onClick={(e) => {
+              e.stopPropagation();
+              onDelete(task);
+            }} className="text-destructive">
               <Trash2 className="mr-2 h-4 w-4" />
               Delete
             </DropdownMenuItem>
@@ -180,10 +186,12 @@ export default function TaskCard({ task, onUpdate, onDelete, onEdit }: TaskCardP
                 <CalendarIcon className="h-4 w-4 flex-shrink-0" />
                 <span className="truncate">{formattedDate}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <Clock className="h-4 w-4 flex-shrink-0" />
-                <span className="truncate">{formattedTime}</span>
-              </div>
+              {task.hasTime && (
+                <div className="flex items-center gap-2">
+                  <Clock className="h-4 w-4 flex-shrink-0" />
+                  <span className="truncate">{formattedTime}</span>
+                </div>
+              )}
             </>
           ) : (
             <div className="flex items-center gap-2">

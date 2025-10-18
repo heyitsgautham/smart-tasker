@@ -5,6 +5,8 @@ import { suggestPriority } from "@/ai/flows/ai-suggested-priority";
 import { sendNotification } from "@/ai/flows/send-notification";
 import { addGoogleCalendarEvent } from "@/ai/flows/add-google-calendar-event";
 import { updateGoogleCalendarEvent } from "@/ai/flows/update-google-calendar-event";
+import { deleteGoogleCalendarEvent } from "@/ai/flows/delete-google-calendar-event";
+import { getGoogleCalendarEvent } from "@/ai/flows/get-google-calendar-event";
 import { getDb } from "@/lib/firebase-admin";
 import type { PushSubscription } from "web-push";
 import type { Task } from "@/lib/types";
@@ -170,6 +172,7 @@ export async function addCalendarEventAction(task: SerializableTask, userId: str
         description: task.description || "",
         dueDate: task.dueDate,
         priority: task.priority,
+        hasTime: task.hasTime,
       },
     });
 
@@ -204,12 +207,36 @@ export async function updateCalendarEventAction(task: SerializableTask, userId: 
         description: task.description || "",
         dueDate: task.dueDate,
         priority: task.priority,
+        hasTime: task.hasTime,
       },
     });
     return { success: true };
   } catch (error: any) {
     console.error("Error updating calendar event:", error);
     return { success: false, error: error.message || "Failed to update task in Google Calendar." };
+  }
+}
+
+export async function deleteCalendarEventAction(eventId: string, userId: string): Promise<{ success: boolean; error?: string }> {
+  try {
+    if (!userId) {
+      throw new Error("User not authenticated.");
+    }
+    if (!eventId) {
+      return { success: false, error: "No calendar event ID provided." };
+    }
+
+    console.log(`Deleting calendar event ${eventId} for user ${userId}`);
+
+    await deleteGoogleCalendarEvent({
+      userId,
+      eventId,
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error deleting calendar event:", error);
+    return { success: false, error: error.message || "Failed to delete event from Google Calendar." };
   }
 }
 
@@ -244,14 +271,16 @@ export async function syncAllTasksToCalendar(userId: string) {
     if (tasksSnapshot.empty) {
       return {
         success: true,
-        synced: 0,
+        added: 0,
+        verified: 0,
         skipped: 0,
         failed: 0,
         message: "No pending tasks found to sync."
       };
     }
 
-    let synced = 0;
+    let added = 0;
+    let verified = 0;
     let skipped = 0;
     let failed = 0;
     const errors: string[] = [];
@@ -266,34 +295,76 @@ export async function syncAllTasksToCalendar(userId: string) {
         continue;
       }
 
-      // Skip tasks that already have a calendar event ID
-      if (taskData.calendarEventId) {
-        skipped++;
-        continue;
-      }
-
       try {
         // Convert Firestore Timestamp to ISO string
         const dueDate = taskData.dueDate.toDate ?
           taskData.dueDate.toDate().toISOString() :
           taskData.dueDate;
 
-        const result = await addGoogleCalendarEvent({
-          userId,
-          task: {
-            title: taskData.title,
-            description: taskData.description || "",
-            dueDate: dueDate,
-            priority: taskData.priority || "medium",
-          },
-        });
+        let eventExistsInCalendar = false;
+        let needsUpdate = false;
 
-        // Store the calendar event ID in Firestore
-        if (result.eventId) {
-          await docSnap.ref.update({ calendarEventId: result.eventId });
+        // Check if task has a calendar event ID
+        if (taskData.calendarEventId) {
+          // Verify the event still exists in Google Calendar
+          try {
+            const eventCheck = await getGoogleCalendarEvent({
+              userId,
+              eventId: taskData.calendarEventId,
+            });
+
+            if (eventCheck.exists) {
+              eventExistsInCalendar = true;
+              // Event exists, verify it has correct details
+              const event = eventCheck.event;
+              needsUpdate =
+                event.summary !== taskData.title ||
+                event.description !== (taskData.description || "");
+
+              if (needsUpdate) {
+                // Update the event with correct details
+                await updateGoogleCalendarEvent({
+                  userId,
+                  eventId: taskData.calendarEventId,
+                  task: {
+                    title: taskData.title,
+                    description: taskData.description || "",
+                    dueDate: dueDate,
+                    priority: taskData.priority || "medium",
+                    hasTime: taskData.hasTime,
+                  },
+                });
+                console.log(`Updated calendar event for task: ${taskData.title}`);
+              }
+              verified++;
+            }
+          } catch (error: any) {
+            // If we can't verify, treat as if it doesn't exist
+            console.log(`Could not verify calendar event for task: ${taskData.title}. Will recreate.`);
+            eventExistsInCalendar = false;
+          }
         }
 
-        synced++;
+        // If event doesn't exist in calendar (either no ID or deleted), create a new one
+        if (!eventExistsInCalendar) {
+          console.log(`Creating calendar event for task: ${taskData.title}`);
+          const result = await addGoogleCalendarEvent({
+            userId,
+            task: {
+              title: taskData.title,
+              description: taskData.description || "",
+              dueDate: dueDate,
+              priority: taskData.priority || "medium",
+              hasTime: taskData.hasTime,
+            },
+          });
+
+          // Update/Store the calendar event ID in Firestore
+          if (result.eventId) {
+            await docSnap.ref.update({ calendarEventId: result.eventId });
+          }
+          added++;
+        }
       } catch (error: any) {
         failed++;
         errors.push(`${taskData.title}: ${error.message}`);
@@ -301,13 +372,20 @@ export async function syncAllTasksToCalendar(userId: string) {
       }
     }
 
+    const resultParts = [];
+    if (added > 0) resultParts.push(`${added} task(s) added to calendar`);
+    if (verified > 0) resultParts.push(`${verified} task(s) verified`);
+    if (skipped > 0) resultParts.push(`${skipped} task(s) skipped (no due date)`);
+    if (failed > 0) resultParts.push(`${failed} task(s) failed`);
+
     return {
       success: true,
-      synced,
+      added,
+      verified,
       skipped,
       failed,
       errors: failed > 0 ? errors : undefined,
-      message: `Synced ${synced} task(s) to Google Calendar. ${skipped} task(s) skipped (no due date or already synced). ${failed > 0 ? `${failed} task(s) failed.` : ''}`
+      message: resultParts.length > 0 ? resultParts.join(', ') + '.' : 'Sync completed.'
     };
 
   } catch (error: any) {

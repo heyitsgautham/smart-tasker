@@ -9,6 +9,7 @@ export interface Task {
   title: string;
   description: string;
   dueDate: Timestamp | null;
+  hasTime?: boolean; // Track if a specific time was set (not just a date)
   priority: TaskPriority;
   reminder: ReminderOption;
   completed: boolean;

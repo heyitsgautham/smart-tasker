@@ -1,13 +1,12 @@
-
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { CalendarIcon, Loader2, Sparkles, X } from "lucide-react";
 import { addDoc, collection, Timestamp, updateDoc } from "firebase/firestore";
-import { setHours, setMinutes, format } from "date-fns";
+import { setHours, setMinutes } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -30,16 +29,13 @@ import { cn, formatDate } from "@/lib/utils";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/context/AuthContext";
 import { getPrioritySuggestion, addCalendarEventAction } from "@/app/actions";
-import type { ReminderOption, Task } from "@/lib/types";
+import type { ReminderOption } from "@/lib/types";
 
 const formSchema = z.object({
   title: z.string().min(1, { message: "Title is required." }).max(50, { message: "Title must be 50 characters or less." }),
   description: z.string().optional(),
-  dueDate: z.date().optional(),
-  dueTime: z.string().optional().refine((time) => {
-    if (!time) return true;
-    return /^([01]\d|2[0-3]):([0-5]\d)$/.test(time);
-  }, { message: "Invalid time format (HH:MM)." }),
+  dueDate: z.date().optional().nullable(),
+  dueTime: z.string().optional(),
   priority: z.enum(["low", "medium", "high"]),
   reminder: z.enum(["none", "on-time", "10-min-before", "1-hour-before"]),
 });
@@ -50,7 +46,7 @@ export default function AddTaskDialog() {
   const [open, setOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
-  const [manuallySetTime, setManuallySetTime] = useState(false);
+  const [autoDetectedDate, setAutoDetectedDate] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -59,11 +55,22 @@ export default function AddTaskDialog() {
     defaultValues: {
       title: "",
       description: "",
-      priority: "medium",
+      dueDate: null,
       dueTime: "",
+      priority: "medium",
       reminder: "10-min-before",
     },
   });
+
+  // Watch dueDate to control time field
+  const watchedDueDate = form.watch("dueDate");
+
+  // Clear time when date is removed
+  useEffect(() => {
+    if (!watchedDueDate && form.getValues("dueTime")) {
+      form.setValue("dueTime", "");
+    }
+  }, [watchedDueDate, form]);
 
   const handleSuggestPriority = async () => {
     const description = form.getValues("description");
@@ -77,21 +84,46 @@ export default function AddTaskDialog() {
     }
 
     setIsSuggesting(true);
-    const result = await getPrioritySuggestion(description);
-    if (result.priority) {
-      form.setValue("priority", result.priority);
-      toast({
-        title: "AI Suggestion",
-        description: `Priority automatically set to "${result.priority}".`,
-      });
-    } else if (result.error) {
-      toast({
-        variant: "destructive",
-        title: "AI Suggestion Failed",
-        description: result.error,
-      });
+    try {
+      const result = await getPrioritySuggestion(description);
+      if (result.priority) {
+        form.setValue("priority", result.priority);
+        toast({
+          title: "AI Suggestion",
+          description: `Priority set to "${result.priority}".`,
+        });
+      } else if (result.error) {
+        toast({
+          variant: "destructive",
+          title: "AI Suggestion Failed",
+          description: result.error,
+        });
+      }
+    } finally {
+      setIsSuggesting(false);
     }
-    setIsSuggesting(false);
+  };
+
+  const handleClearDate = () => {
+    form.setValue("dueDate", null);
+    form.setValue("dueTime", "");
+    setAutoDetectedDate(false);
+  };
+
+  const handleClearTime = () => {
+    form.setValue("dueTime", "");
+  };
+
+  const handleDateDetected = (date: Date | null) => {
+    // Only auto-fill if user hasn't manually set a date
+    if (date && !autoDetectedDate && !form.getValues("dueDate")) {
+      form.setValue("dueDate", date);
+      const timeStr = date.toTimeString().slice(0, 5); // HH:MM format
+      if (timeStr !== "00:00") {
+        form.setValue("dueTime", timeStr);
+      }
+      setAutoDetectedDate(true);
+    }
   };
 
   async function onSubmit(values: AddTaskFormValues) {
@@ -99,24 +131,36 @@ export default function AddTaskDialog() {
       toast({ variant: "destructive", title: "You must be logged in." });
       return;
     }
+
     setIsSubmitting(true);
     try {
-      let dueDateWithTime: Date | null = null;
+      // Build the due date with optional time
+      let dueDateTimestamp: Timestamp | null = null;
+      const hasExplicitTime = Boolean(values.dueTime?.trim());
+
       if (values.dueDate) {
-        dueDateWithTime = values.dueDate;
-        if (values.dueTime) {
+        let dateWithTime = new Date(values.dueDate);
+
+        if (hasExplicitTime && values.dueTime) {
           const [hours, minutes] = values.dueTime.split(':').map(Number);
-          dueDateWithTime = setMinutes(setHours(dueDateWithTime, hours), minutes);
+          dateWithTime = setMinutes(setHours(dateWithTime, hours), minutes);
+        } else {
+          // If no time specified, set to start of day
+          dateWithTime.setHours(0, 0, 0, 0);
         }
+
+        dueDateTimestamp = Timestamp.fromDate(dateWithTime);
       }
 
+      // Create new task
       const newTask = {
         userId: user.uid,
         title: values.title,
         description: values.description || "",
         priority: values.priority,
         reminder: values.reminder as ReminderOption,
-        dueDate: dueDateWithTime ? Timestamp.fromDate(dueDateWithTime) : null,
+        dueDate: dueDateTimestamp,
+        hasTime: hasExplicitTime,
         completed: false,
         createdAt: Timestamp.now(),
         notificationSent: false,
@@ -124,35 +168,40 @@ export default function AddTaskDialog() {
 
       const docRef = await addDoc(collection(db, "tasks"), newTask);
 
-      if (dueDateWithTime) {
+      // Add to calendar if has due date
+      if (dueDateTimestamp) {
         const serializableTask = {
           id: docRef.id,
           ...newTask,
-          dueDate: dueDateWithTime.toISOString(),
+          dueDate: dueDateTimestamp.toDate().toISOString(),
           createdAt: newTask.createdAt.toDate().toISOString(),
         };
-        // Add to calendar and store the event ID
-        addCalendarEventAction(serializableTask, user.uid).then(async (result) => {
-          if (result?.success && result.eventId) {
-            // Update the task with the calendar event ID
-            await updateDoc(docRef, { calendarEventId: result.eventId });
-          } else if (result?.error) {
-            console.error("Failed to add to Google Calendar:", result.error);
-          }
-        });
-      }
 
+        const result = await addCalendarEventAction(serializableTask, user.uid);
+        if (result?.success && result.eventId) {
+          // Store calendar event ID
+          await updateDoc(docRef, { calendarEventId: result.eventId });
+        } else if (result?.error) {
+          console.error("Failed to add to Google Calendar:", result.error);
+          // Don't show error to user - task is still created
+        }
+      }
 
       toast({
         title: "Task Added",
         description: `"${values.title}" has been added to your list.`,
       });
+
       form.reset();
-      setManuallySetTime(false); // Reset manual time flag
+      setAutoDetectedDate(false);
       setOpen(false);
     } catch (error) {
       console.error("Failed to add task:", error);
-      toast({ variant: "destructive", title: "Failed to add task." });
+      toast({
+        variant: "destructive",
+        title: "Failed to add task.",
+        description: error instanceof Error ? error.message : "Unknown error"
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -172,12 +221,13 @@ export default function AddTaskDialog() {
         </DialogHeader>
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-4">
+            {/* Title Field */}
             <FormField
               control={form.control}
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Title (max 50 characters)</FormLabel>
+                  <FormLabel>Title</FormLabel>
                   <FormControl>
                     <Input
                       placeholder="e.g., Finalize project report"
@@ -189,6 +239,8 @@ export default function AddTaskDialog() {
                 </FormItem>
               )}
             />
+
+            {/* Description Field */}
             <FormField
               control={form.control}
               name="description"
@@ -197,107 +249,100 @@ export default function AddTaskDialog() {
                   <FormLabel>Description (try typing dates like "tomorrow at 3pm")</FormLabel>
                   <FormControl>
                     <SmartTextarea
-                      placeholder="Add more details about your task..."
+                      placeholder="Add more details..."
                       {...field}
-                      onChange={(e) => {
-                        // When user types in description, allow auto-detection again
-                        setManuallySetTime(false);
-                        field.onChange(e);
-                      }}
-                      onDateDetected={(date) => {
-                        // Only auto-update time if user hasn't manually set it via time field
-                        if (date && !manuallySetTime) {
-                          form.setValue("dueDate", date);
-                          form.setValue("dueTime", format(date, 'HH:mm'));
-                        }
-                      }}
+                      value={field.value || ""}
+                      onDateDetected={handleDateDetected}
                     />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
+            {/* Due Date and Time */}
             <div className="grid grid-cols-2 gap-4">
+              {/* Due Date */}
               <FormField
                 control={form.control}
                 name="dueDate"
                 render={({ field }) => (
                   <FormItem className="flex flex-col">
                     <FormLabel>Due Date</FormLabel>
-                    <div className="relative">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <FormControl>
-                            <Button
-                              variant={"outline"}
-                              className={cn(
-                                "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                              )}
-                            >
-                              {field.value ? formatDate(field.value, 'PPP') : <span>Pick a date</span>}
-                              {field.value ? (
-                                <span
-                                  className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded-sm hover:bg-destructive/10 cursor-pointer shrink-0"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    field.onChange(undefined);
-                                    form.setValue("dueTime", "");
-                                  }}
-                                >
-                                  <X className="h-4 w-4" />
-                                </span>
-                              ) : (
-                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                              )}
-                            </Button>
-                          </FormControl>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            selected={field.value}
-                            onSelect={field.onChange}
-                            disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
-                            initialFocus
-                          />
-                        </PopoverContent>
-                      </Popover>
-                    </div>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant="outline"
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              formatDate(field.value, 'PPP')
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            {field.value ? (
+                              <span
+                                className="ml-auto inline-flex h-5 w-5 items-center justify-center rounded-sm hover:bg-destructive/10 cursor-pointer shrink-0"
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  handleClearDate();
+                                }}
+                              >
+                                <X className="h-4 w-4" />
+                              </span>
+                            ) : (
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            )}
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value || undefined}
+                          onSelect={(date) => {
+                            field.onChange(date);
+                            setAutoDetectedDate(false); // User manually selected
+                          }}
+                          disabled={(date) => date < new Date(new Date().setHours(0, 0, 0, 0))}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
+              {/* Due Time */}
               <FormField
                 control={form.control}
                 name="dueTime"
                 render={({ field }) => (
-                  <FormItem className="flex flex-col justify-end">
-                    <FormLabel>Due Time (Optional)</FormLabel>
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Time (optional)</FormLabel>
                     <div className="relative">
                       <FormControl>
                         <Input
                           type="time"
+                          disabled={!watchedDueDate}
                           {...field}
+                          value={field.value || ""}
                           className="h-10"
-                          placeholder="HH:MM"
-                          onChange={(e) => {
-                            // Mark that user manually set the time
-                            setManuallySetTime(true);
-                            field.onChange(e);
-                          }}
                         />
                       </FormControl>
-                      {field.value && (
+                      {field.value && watchedDueDate && (
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
                           className="absolute right-0 top-0 h-10 w-8 p-0 hover:bg-destructive/10"
-                          onClick={() => {
-                            field.onChange("");
-                            setManuallySetTime(false);
-                          }}
+                          onClick={handleClearTime}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -308,6 +353,47 @@ export default function AddTaskDialog() {
                 )}
               />
             </div>
+
+            {/* Priority Field */}
+            <FormField
+              control={form.control}
+              name="priority"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Priority</FormLabel>
+                  <div className="flex gap-2">
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      onClick={handleSuggestPriority}
+                      disabled={isSuggesting}
+                    >
+                      {isSuggesting ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Sparkles className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </div>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Reminder Field */}
             <FormField
               control={form.control}
               name="reminder"
@@ -322,7 +408,7 @@ export default function AddTaskDialog() {
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
-                      <SelectItem value="on-time">At time of due date</SelectItem>
+                      <SelectItem value="on-time">On time</SelectItem>
                       <SelectItem value="10-min-before">10 minutes before</SelectItem>
                       <SelectItem value="1-hour-before">1 hour before</SelectItem>
                     </SelectContent>
@@ -331,35 +417,12 @@ export default function AddTaskDialog() {
                 </FormItem>
               )}
             />
-            <FormField
-              control={form.control}
-              name="priority"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Priority</FormLabel>
-                  <Select onValueChange={field.onChange} value={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select priority" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <Button type="button" variant="outline" size="sm" className="w-full gap-2 hover:bg-orange-500 hover:text-white hover:border-orange-500 transition-colors group" onClick={handleSuggestPriority} disabled={isSuggesting}>
-              {isSuggesting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4 text-orange-500 group-hover:text-white transition-colors" />}
-              Suggest Priority with AI
-            </Button>
+
+            {/* Submit Button */}
             <DialogFooter>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? <Loader2 className="animate-spin" /> : "Add Task"}
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Add Task
               </Button>
             </DialogFooter>
           </form>
