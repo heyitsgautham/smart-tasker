@@ -1,12 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { CalendarIcon, Loader2, Sparkles, X } from "lucide-react";
 import { addDoc, collection, Timestamp, updateDoc } from "firebase/firestore";
-import { setHours, setMinutes } from "date-fns";
+import { setHours, setMinutes, format } from "date-fns";
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -47,6 +47,7 @@ export default function AddTaskDialog() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
   const [autoDetectedDate, setAutoDetectedDate] = useState(false);
+  const [manuallySetTime, setManuallySetTime] = useState(false);
   const { user } = useAuth();
   const { toast } = useToast();
 
@@ -104,27 +105,25 @@ export default function AddTaskDialog() {
     }
   };
 
-  const handleClearDate = () => {
+  const handleClearDate = useCallback(() => {
     form.setValue("dueDate", null);
     form.setValue("dueTime", "");
     setAutoDetectedDate(false);
-  };
+    setManuallySetTime(false);
+  }, [form]);
 
-  const handleClearTime = () => {
+  const handleClearTime = useCallback(() => {
     form.setValue("dueTime", "");
-  };
+    setManuallySetTime(false);
+  }, [form]);
 
-  const handleDateDetected = (date: Date | null) => {
-    // Only auto-fill if user hasn't manually set a date
-    if (date && !autoDetectedDate && !form.getValues("dueDate")) {
+  const handleDateDetected = useCallback((date: Date | null) => {
+    // Only auto-update if user hasn't manually set time via time field
+    if (date && !manuallySetTime) {
       form.setValue("dueDate", date);
-      const timeStr = date.toTimeString().slice(0, 5); // HH:MM format
-      if (timeStr !== "00:00") {
-        form.setValue("dueTime", timeStr);
-      }
-      setAutoDetectedDate(true);
+      form.setValue("dueTime", format(date, 'HH:mm'));
     }
-  };
+  }, [manuallySetTime, form]);
 
   async function onSubmit(values: AddTaskFormValues) {
     if (!user) {
@@ -252,6 +251,11 @@ export default function AddTaskDialog() {
                       placeholder="Add more details..."
                       {...field}
                       value={field.value || ""}
+                      onChange={(e) => {
+                        // When user types in description, allow auto-detection again
+                        setManuallySetTime(false);
+                        field.onChange(e);
+                      }}
                       onDateDetected={handleDateDetected}
                     />
                   </FormControl>
@@ -334,6 +338,11 @@ export default function AddTaskDialog() {
                           {...field}
                           value={field.value || ""}
                           className="h-10"
+                          onChange={(e) => {
+                            // Mark that user manually set the time
+                            setManuallySetTime(true);
+                            field.onChange(e.target.value);
+                          }}
                         />
                       </FormControl>
                       {field.value && watchedDueDate && (

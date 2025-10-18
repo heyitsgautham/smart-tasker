@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -55,6 +55,8 @@ interface EditTaskDialogProps {
 export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  const [autoDetectedDate, setAutoDetectedDate] = useState(false);
+  const [manuallySetTime, setManuallySetTime] = useState(false);
   const isInitializing = useRef(false);
   const { toast } = useToast();
   const { user } = useAuth();
@@ -92,6 +94,9 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
         priority: task.priority,
         reminder: task.reminder || '10-min-before',
       });
+
+      // Set manuallySetTime based on whether task has time
+      setManuallySetTime(!!task.hasTime);
 
       // Allow auto-clear after a short delay
       setTimeout(() => {
@@ -139,14 +144,25 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
     }
   };
 
-  const handleClearDate = () => {
+  const handleClearDate = useCallback(() => {
     form.setValue("dueDate", null);
     form.setValue("dueTime", "");
-  };
+    setAutoDetectedDate(false);
+    setManuallySetTime(false);
+  }, [form]);
 
-  const handleClearTime = () => {
+  const handleClearTime = useCallback(() => {
     form.setValue("dueTime", "");
-  };
+    setManuallySetTime(false);
+  }, [form]);
+
+  const handleDateDetected = useCallback((date: Date | null) => {
+    // Don't auto-update during initial load or if user manually set time via time field
+    if (date && !isInitializing.current && !manuallySetTime) {
+      form.setValue("dueDate", date);
+      form.setValue("dueTime", format(date, 'HH:mm'));
+    }
+  }, [manuallySetTime, form]);
 
   async function onSubmit(values: EditTaskFormValues) {
     if (!user) {
@@ -296,15 +312,20 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
               name="description"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Description (optional)</FormLabel>
+                  <FormLabel>Description (try typing dates like "tomorrow at 3pm")</FormLabel>
                   <FormControl>
                     <SmartTextarea
                       placeholder="Add more details..."
                       {...field}
                       value={field.value || ""}
-                      onDateDetected={() => {
-                        // Disabled auto-date detection in edit mode for clarity
+                      onChange={(e) => {
+                        // When user types in description, allow auto-detection again
+                        if (!isInitializing.current) {
+                          setManuallySetTime(false);
+                        }
+                        field.onChange(e);
                       }}
+                      onDateDetected={handleDateDetected}
                     />
                   </FormControl>
                   <FormMessage />
@@ -383,6 +404,11 @@ export default function EditTaskDialog({ task, isOpen, onClose }: EditTaskDialog
                           {...field}
                           value={field.value || ""}
                           className="h-10"
+                          onChange={(e) => {
+                            // Mark that user manually set the time
+                            setManuallySetTime(true);
+                            field.onChange(e.target.value);
+                          }}
                         />
                       </FormControl>
                       {field.value && watchedDueDate && (
