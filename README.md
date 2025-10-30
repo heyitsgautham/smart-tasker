@@ -7,6 +7,8 @@
 
 SmartTasker is an **intelligent task management app** built with **Next.js 15**, **TypeScript**, and **Firebase**, integrating **Google Gemini AI** for a smarter productivity experience. It helps users organize tasks, set priorities, parse dates naturally, and sync with Google Calendar—all in real-time.  
 
+## Try out the application - https://smart-tasker-eight.vercel.app/
+
 ---
 
 ## 🚀 Key Features
